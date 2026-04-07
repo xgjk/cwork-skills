@@ -5,7 +5,7 @@ skillcode: cms-cwork-workflow
 github: https://github.com/xgjk/cwork-skills/tree/main/cwork-skills/cms-cwork-workflow
 dependencies:
   - cms-auth-skills
-version: 1.0.0
+version: 1.0.1
 tools_provided:
   - name: cwork_client
     category: exec
