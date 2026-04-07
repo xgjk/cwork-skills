@@ -1,8 +1,8 @@
-# cms-cwork — Agent-First 重构设计文档
+# cms-cwork-workflow — Agent-First 重构设计文档
 
 ## 设计概述
 
-将 cms-cwork 从 TypeScript 源码模式重构为 Agent-First 架构，通过 Python 编排脚本提供可组合、可复用的能力层。
+将 cms-cwork-workflow 从 TypeScript 源码模式重构为 Agent-First 架构，通过 Python 编排脚本提供可组合、可复用的能力层。
 
 ## 核心设计理念
 
@@ -20,10 +20,12 @@
 ## 文件结构设计
 
 ```
-cms-cwork/
+cms-cwork-workflow/
 ├── SKILL.md                           ← 产品级接口文档
 ├── scripts/
 │   ├── cwork_client.py               ← 共享 HTTP 客户端
+│   ├── cwork_api.py                  ← 共享 API 客户端模块
+│   ├── cwork-search-emp.py           ← 搜索员工
 │   ├── cwork-send-report.py          ← 发送汇报
 │   ├── cwork-query-report.py         ← 查询汇报
 │   ├── cwork-create-task.py          ← 创建任务
@@ -33,13 +35,12 @@ cms-cwork/
 │   ├── cwork-todo.py                 ← 待办管理
 │   └── cwork-templates.py            ← 模板管理
 ├── design/
-│   ├── DESIGN.md                     ← 本文件
-│   ├── DISCUSSION-LOG.md            ← 设计讨论记录
-│   ├── LEARNING-LOOP.md             ← 学习建议
-│   └── SHARE-LOG.jsonl              ← 对外分享记录
+│   └── DESIGN.md                     ← 本文件
 └── references/
-    ├── api-endpoints.md             ← API 端点文档
-    └── api-client.md                ← Python 客户端参考
+    ├── api-endpoints.md              ← API 端点文档
+    ├── api-client.md                 ← Python 客户端参考
+    ├── maintenance.md                ← 维护说明
+    └── original-api-client.py        ← 原始客户端参考实现
 ```
 
 ## 编排脚本架构
@@ -125,7 +126,7 @@ Agent → exec: python3 cwork-nudge-report.py identify --days-threshold 7
 1. 在 `cwork_client.py` 添加新的 API 方法
 2. 在对应脚本中调用新 API
 3. 更新 `SKILL.md` 文档
-4. 更新 `DISCUSSION-LOG.md` 记录设计变更
+4. 按需更新 `DESIGN.md` 和 `SKILL.md` 记录设计变更
 
 ### 版本管理
 - 主版本号：重大架构变更

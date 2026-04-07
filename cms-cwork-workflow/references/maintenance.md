@@ -3,17 +3,17 @@
 ## 基本信息
 
 - 版本：见 `_meta.json`
-- ClawHub slug：`cms-cwork`
+- ClawHub slug：`cms-cwork-workflow`
 
 ## GitHub 地址
 
-- 仓库：https://github.com/evan-zhang/agent-factory
-- Skill 目录：`05_products/cms-cwork/`
+- 仓库：https://github.com/xgjk/cwork-skills
+- Skill 目录：`cwork-skills/cms-cwork-workflow/`
 
 ## 如何提 Issue
 
-1. 访问 https://github.com/evan-zhang/agent-factory/issues/new
-2. 选择 Label：`cms-cwork`
+1. 访问 https://github.com/xgjk/cwork-skills/issues/new
+2. 选择 Label：`cms-cwork-workflow`
 3. 填写问题描述 + 复现步骤
 
 ## 如何更新
@@ -25,7 +25,7 @@
 
 **ClawHub 用户：**
 ```bash
-clawhub update cms-cwork
+clawhub update cms-cwork-workflow
 ```
 
 ---

@@ -10,7 +10,6 @@
 | 变量名 | 默认值 | 必填 |
 |--------|--------|------|
 | `CWORK_BASE_URL` | `https://sg-al-cwork-web.mediportal.com.cn` | 否 |
-| `CWORK_APP_KEY` | — | **是** |
 
 ---
 

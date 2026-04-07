@@ -1,7 +1,11 @@
 ---
-name: cms-cwork
-description: "使用 CWork API 搜索员工（支持模糊查询）、发送/查询汇报、管理待办（决策/建议/反馈）、创建/查询任务。触发词：cwork/CWork/工作协同/发送汇报/发汇报/汇报/申请/周报/待办/任务/催办/搜索员工/查收件箱。输入：员工姓名/汇报内容/待办 ID，输出：员工列表/汇报 ID/待办列表/任务列表"
-version: 3.3.0
+name: cms-cwork-workflow
+description: 管理工作协同中的员工查询、汇报处理、待办闭环和任务协作流程
+skillcode: cms-cwork-workflow
+github: https://github.com/xgjk/cwork-skills/tree/main/cwork-skills/cms-cwork-workflow
+dependencies:
+  - cms-auth-skills
+version: 1.0.0
 tools_provided:
   - name: cwork_client
     category: exec
@@ -71,7 +75,7 @@ tools_provided:
     status: active
 ---
 
-# cms-cwork — Agent-First Architecture
+# cms-cwork-workflow — Agent-First Architecture
 
 ## 🚀 快速开始
 
@@ -245,18 +249,6 @@ cat scripts/cwork_client.py | grep urlencode
 - **强制封装**：所有 API 调用必须通过脚本，禁止直接 HTTP 调用
 - **TypeScript 参考**保留在 `references/` 目录
 
-## 环境变量
-
-| 变量 | 必填 | 默认值 | 说明 |
-|------|------|--------|------|
-| `CWORK_APP_KEY` | ✅ | — | CWork API 认证密钥 |
-| `CWORK_BASE_URL` | ❌ | `https://sg-al-cwork-web.mediportal.com.cn` | API 基础地址 |
-
-### 如何获取 CWORK_APP_KEY
-
-1. 联系玄关平台管理员获取 `CWORK_APP_KEY`
-2. 或访问玄关开放平台（https://github.com/xgjk/dev-guide）查看申请流程
-3. 获取后在 Gateway 环境变量中配置
 
 ## 9 个编排命令
 
@@ -747,7 +739,7 @@ python3 scripts/cwork-templates.py list --begin-time 1710000000000 --end-time 17
 ## 目录结构
 
 ```
-cms-cwork/
+cms-cwork-workflow/
 ├── SKILL.md                          ← 本文件（意图级接口文档）
 ├── scripts/
 │   ├── cwork_api.py                  ← 共享 API 客户端模块
@@ -764,7 +756,7 @@ cms-cwork/
 └── references/                       ← TypeScript 源码参考（保留）
     ├── api-client.md
     ├── api-endpoints.md
-    └── api-reference.md
+    └── maintenance.md
 ```
 
 ## Agent 调用模式
@@ -812,17 +804,3 @@ Agent → exec: python3 scripts/cwork-nudge-report.py nudge \
 - **成功**：JSON 到 stdout，含 `"success": true`
 - **失败**：JSON 到 stderr，含 `"success": false` 和 `"error"` 字段，exit code ≠ 0
 - **Agent 应同时检查 stdout 和 stderr**
-
-## 从 v1 迁移
-
-| v1（TypeScript 64 个 Skill） | v3（Python 9 个脚本） |
-|---|---|
-| `emp-search` + `report-validate-receivers` + `report-submit` + `draft.ts` | `cwork-send-report.py` |
-| `inbox-query` + `outbox-query` + `unread-report-list` + `report-get-by-id` | `cwork-query-report.py` |
-| `task-structure` + `task-create` + `emp-search` | `cwork-create-task.py` |
-| `report-reply` + `report-read-mark` + `report-is-read` | `cwork-review-report.py` |
-| `task-my-assigned` + `task-my-created` + `task-manager-dashboard` + `task-chain-get` | `cwork-query-tasks.py` |
-| `identify-unclosed-items` + `reminder-tip` + `report-remind` | `cwork-nudge-report.py` |
-| `todo-list` + `todo-complete` | `cwork-todo.py` |
-| `template-list` | `cwork-templates.py` |
-| LLM 依赖 Skill（`draft-gen`、`outline-gen`、`ai-*` 等） | 由 Agent 的 LLM 能力直接处理 |
