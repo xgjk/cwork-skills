@@ -1,6 +1,6 @@
 ---
 name: cms-cwork-workflow
-description: 管理工作协同中的员工查询、汇报处理、待办闭环和任务协作流程
+description: 管理工作协同中的员工查询、汇报处理、待办闭环和任务协作流程。触发词：cwork/CWork/工作协同/发送汇报/发汇报/汇报/申请/周报/待办/任务/催办/搜索员工/查收件箱。
 skillcode: cms-cwork-workflow
 github: https://github.com/xgjk/cwork-skills/tree/main/cwork-skills/cms-cwork-workflow
 dependencies:
