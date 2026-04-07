@@ -275,6 +275,7 @@ class CWorkClient:
         report_record_id: str,
         content_html: str,
         *,
+        content_type: str = "html",
         add_emp_id_list: list[str] | None = None,
         send_msg: bool = True,
     ) -> int:
@@ -283,6 +284,7 @@ class CWorkClient:
             "appKey": self.app_key,
             "reportRecordId": report_record_id,
             "contentHtml": content_html,
+            "contentType": content_type,
             "addEmpIdList": add_emp_id_list,
             "sendMsg": send_msg,
         })
@@ -413,11 +415,14 @@ class CWorkClient:
     # Todo / feedback
     # -------------------------------------------------------------------------
 
-    def list_created_feedbacks(self, page_num: int, page_size: int) -> dict:
-        return self._post("/open-api/work-report/todoTask/listCreatedFeedbacks", {
-            "pageNum": page_num,
-            "pageSize": page_size,
-        })
+    def list_created_feedbacks(self, emp_id: str | None = None) -> list:
+        """API 5.12: GET, optional empId filter."""
+        params = {}
+        if emp_id is not None:
+            params["empId"] = emp_id
+        return self._get(
+            "/open-api/work-report/todoTask/listCreatedFeedbacks", params
+        )
 
     def get_todo_list(self, page_index: int, page_size: int, *, status: str | None = None) -> dict:
         params = {"pageIndex": page_index, "pageSize": page_size}
@@ -426,12 +431,18 @@ class CWorkClient:
         return self._post("/open-api/work-report/reportInfoOpenQuery/todoList", params)
 
     def complete_todo(
-        self, todo_id: str, content: str, *, operate: str | None = None
+        self,
+        todo_id: str,
+        content: str,
+        *,
+        content_type: str = "html",
+        operate: str | None = None,
     ) -> bool:
         return self._post("/open-api/work-report/open-platform/todo/completeTodo", {
             "appKey": self.app_key,
             "todoId": todo_id,
             "content": content,
+            "contentType": content_type,
             "operate": operate,
         })
 
@@ -606,7 +617,12 @@ def parse_deadline(value: str | None) -> int | None:
 
 
 def resolve_names_to_empids(client: CWorkClient, names: list[str]) -> list[str]:
-    """Resolve a list of names to empIds via search API."""
+    """Resolve a list of names to empIds via search API.
+
+    Raises CWorkError if any name is not found or matches more than one employee.
+    The error message includes candidates (with empId/name/dept/title) so the
+    caller can surface disambiguation info to the agent or user.
+    """
     empids = []
     for name in names:
         result = client.search_emp_by_name(name)
@@ -614,8 +630,26 @@ def resolve_names_to_empids(client: CWorkClient, names: list[str]) -> list[str]:
         outside_list = result.get("outside", {}).get("empList", [])
         all_emps = inside_list + outside_list
         if not all_emps:
-            raise CWorkError(f"No employee found with name: {name}")
-        empids.append(all_emps[0].get("empId") or all_emps[0].get("empid"))
+            raise CWorkError(
+                f'未找到姓名为"{name}"的员工，请确认姓名或直接提供员工 ID'
+            )
+        if len(all_emps) > 1:
+            candidates = [
+                {
+                    "empId": e.get("id") or e.get("empId") or e.get("empid"),
+                    "name": e.get("name", ""),
+                    "title": e.get("title", ""),
+                    "dept": e.get("mainDept", ""),
+                }
+                for e in all_emps
+            ]
+            raise CWorkError(
+                f'"{name}" 匹配到多名员工，请指定唯一员工后重试：'
+                + json.dumps(candidates, ensure_ascii=False)
+            )
+        empids.append(
+            all_emps[0].get("id") or all_emps[0].get("empId") or all_emps[0].get("empid")
+        )
     return empids
 
 

@@ -7,6 +7,7 @@ Environment variables:
 
 import os
 import json
+import sys
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -19,6 +20,32 @@ import urllib.error
 class CWorkError(Exception):
     """Raised on API errors (non-1 resultCode or HTTP non-OK)."""
     pass
+
+
+# ---------------------------------------------------------------------------
+# 307/308 redirect handler — preserves original HTTP method + body
+# ---------------------------------------------------------------------------
+
+class _MethodPreservingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_headers = {
+            k: v for k, v in req.header_items()
+            if k.lower() not in ("host", "content-length")
+        }
+        return urllib.request.Request(
+            newurl,
+            data=req.data,
+            headers=new_headers,
+            method=req.method,
+            origin_req_host=req.origin_req_host,
+            unverifiable=True,
+        )
+
+    def http_error_307(self, req, fp, code, msg, headers):
+        return self.http_error_302(req, fp, code, msg, headers)
+
+    def http_error_308(self, req, fp, code, msg, headers):
+        return self.http_error_302(req, fp, code, msg, headers)
 
 
 # ---------------------------------------------------------------------------
@@ -50,9 +77,7 @@ class CWorkClient:
             q = urllib.parse.urlencode(
                 {k: v for k, v in params.items() if v is not None}
             )
-            url = f"{url}?{q}&appKey={self.app_key}"
-        else:
-            url = f"{url}?appKey={self.app_key}"
+            url = f"{url}?{q}"
         req = urllib.request.Request(
             url, headers=self._headers(), method="GET"
         )
@@ -70,9 +95,12 @@ class CWorkClient:
         return self._request(req)
 
     def _request(self, req: urllib.request.Request) -> dict:
+        opener = urllib.request.build_opener(_MethodPreservingRedirectHandler)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read())
+            with opener.open(req, timeout=30) as resp:
+                raw = resp.read()
+                charset = resp.headers.get_content_charset() or "utf-8"
+                result = json.loads(raw.decode(charset))
         except urllib.error.HTTPError as e:
             raise CWorkError(f"HTTP {e.code}: {e.reason}")
         except urllib.error.URLError as e:
@@ -224,6 +252,7 @@ class CWorkClient:
         report_record_id: str,
         content_html: str,
         *,
+        content_type: str = "html",
         add_emp_id_list: list[str] | None = None,
         send_msg: bool = True,
     ) -> int:
@@ -232,6 +261,7 @@ class CWorkClient:
             "appKey": self.app_key,
             "reportRecordId": report_record_id,
             "contentHtml": content_html,
+            "contentType": content_type,
             "addEmpIdList": add_emp_id_list,
             "sendMsg": send_msg,
         })
@@ -374,12 +404,13 @@ class CWorkClient:
     # Todo / feedback
     # -------------------------------------------------------------------------
 
-    def list_created_feedbacks(
-        self, page_num: int, page_size: int
-    ) -> dict:
-        return self._post(
-            "/open-api/work-report/todoTask/listCreatedFeedbacks",
-            {"pageNum": page_num, "pageSize": page_size},
+    def list_created_feedbacks(self, emp_id: str | None = None) -> list:
+        """API 5.12: GET, optional empId filter."""
+        params = {}
+        if emp_id is not None:
+            params["empId"] = emp_id
+        return self._get(
+            "/open-api/work-report/todoTask/listCreatedFeedbacks", params
         )
 
     def get_todo_list(
@@ -397,7 +428,12 @@ class CWorkClient:
         )
 
     def complete_todo(
-        self, todo_id: str, content: str, *, operate: str | None = None
+        self,
+        todo_id: str,
+        content: str,
+        *,
+        content_type: str = "html",
+        operate: str | None = None,
     ) -> bool:
         return self._post(
             "/open-api/work-report/open-platform/todo/completeTodo",
@@ -405,6 +441,7 @@ class CWorkClient:
                 "appKey": self.app_key,
                 "todoId": todo_id,
                 "content": content,
+                "contentType": content_type,
                 "operate": operate,
             },
         )

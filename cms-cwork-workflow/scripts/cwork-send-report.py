@@ -67,7 +67,7 @@ def parse_args():
     )
     p.add_argument(
         "--draft-id", dest="draft_id", default=None,
-        help="Existing draft ID to update (omit to create new draft)"
+        help="汇报 ID（report ID），用于更新已有草稿；来自上次 --preview-only 输出的 draftId 字段"
     )
     return p.parse_args()
 
@@ -124,21 +124,27 @@ def resolve_receivers(client, names: list[str]) -> dict:
     return results
 
 
-def validate_receivers(resolved: dict) -> tuple[list[dict], list[str]]:
-    """Return (confirmed list, error messages). Fails if any name ambiguous or missing."""
+def validate_receivers(resolved: dict) -> tuple[list[dict], list[dict]]:
+    """Return (confirmed list, structured error list).
+
+    Each error dict has keys: name, reason, candidates (for 'multiple').
+    Structured errors allow the agent to present disambiguation info.
+    """
     confirmed = []
     errors = []
     for name, info in resolved.items():
         if info["status"] == "not_found":
-            errors.append(f'"{name}" 未找到对应员工')
+            errors.append({"name": name, "reason": "not_found"})
         elif info["status"] == "multiple":
-            opts = "\n".join(
-                f'  - {e["name"]}（{e["title"]}，{e["dept"]}）'
-                for e in info["employees"]
-            )
-            errors.append(
-                f'"{name}" 匹配到多人，请输入更精确的姓名：\n{opts}'
-            )
+            errors.append({
+                "name": name,
+                "reason": "multiple_matches",
+                "candidates": [
+                    {"empId": e["empId"], "name": e["name"],
+                     "title": e.get("title", ""), "dept": e.get("dept", "")}
+                    for e in info["employees"]
+                ],
+            })
         elif info["status"] == "found":
             confirmed.append({"empId": info["empId"], "name": info["name"]})
     return confirmed, errors
@@ -178,7 +184,7 @@ def upload_files(client, file_paths: list[str], file_names: list[str]) -> list[d
 
 def save_draft(client, args, accept_emp_ids: list[str], copy_emp_ids: list[str],
                file_vos: list[dict]) -> str | None:
-    """Save or update draft; return draft ID."""
+    """Save or update draft; return report ID (汇报ID, not 草稿箱ID)."""
     params = {
         "main": args.title,
         "content_html": args.content_html,
@@ -191,7 +197,8 @@ def save_draft(client, args, accept_emp_ids: list[str], copy_emp_ids: list[str],
         "plan_id": args.plan_id,
     }
     if args.draft_id:
-        params["id"] = args.draft_id
+        # API 5.23: 更新草稿需传 id（汇报ID）；client.save_draft 的参数名是 draft_id
+        params["draft_id"] = args.draft_id
     try:
         result = client.save_draft(**{k: v for k, v in params.items() if v is not None})
         return result.get("id")
@@ -295,15 +302,24 @@ def main():
 
     resolved = resolve_receivers(client, receiver_names)
     confirmed, errors = validate_receivers(resolved)
-    if errors:
-        print(json.dumps({"success": False, "step": "validate_receivers", "errors": errors}, ensure_ascii=False, indent=2))
-        sys.exit(1)
-
     cc_resolved = resolve_receivers(client, cc_names)
     cc_confirmed, cc_errors = validate_receivers(cc_resolved)
-    # CC errors are non-fatal — just warn
+
+    # Both receiver and CC errors are fatal: ambiguous/missing names must be
+    # resolved before sending, otherwise recipients would be silently dropped.
+    all_errors = []
+    if errors:
+        all_errors.append({"field": "receivers", "errors": errors})
     if cc_errors:
-        print(json.dumps({"step": "cc_validate_warnings", "errors": cc_errors}, ensure_ascii=False), file=sys.stderr)
+        all_errors.append({"field": "cc", "errors": cc_errors})
+    if all_errors:
+        print(json.dumps({
+            "success": False,
+            "step": "validate_names",
+            "message": "部分姓名未能唯一匹配，请确认后重试",
+            "details": all_errors,
+        }, ensure_ascii=False, indent=2))
+        sys.exit(1)
 
     accept_emp_ids = [e["empId"] for e in confirmed]
     cc_emp_ids = [e["empId"] for e in cc_confirmed]
@@ -312,11 +328,24 @@ def main():
     file_vos = upload_files(client, args.file_paths, args.file_names)
 
     # ---- Step 3: Save draft ----
-    draft_id = save_draft(client, args, accept_emp_ids, cc_emp_ids, file_vos)
+    # save_draft returns the 汇报ID (report ID), NOT the 草稿箱记录ID.
+    # The delete API (5.26) needs the 草稿箱ID (DraftBoxListVO.id).
+    # We look it up via list_drafts by matching businessId == report_id.
+    saved_report_id = save_draft(client, args, accept_emp_ids, cc_emp_ids, file_vos)
+    draft_box_id = None
+    if saved_report_id:
+        try:
+            pages = client.list_drafts(1, 20)
+            for d in (pages.get("list") or []):
+                if d.get("bizType") == "report" and str(d.get("businessId")) == str(saved_report_id):
+                    draft_box_id = str(d.get("id"))
+                    break
+        except CWorkError:
+            pass
 
     # ---- Step 4: Build preview ----
     preview = build_preview(args, confirmed, cc_confirmed, file_vos)
-    preview["draftId"] = draft_id
+    preview["draftId"] = saved_report_id
 
     if args.preview_only:
         print(json.dumps(preview, ensure_ascii=False, indent=2))
@@ -328,8 +357,8 @@ def main():
 
     if report_id:
         # ---- Step 6: Cleanup ----
-        if draft_id:
-            cleanup_draft(client, draft_id)
+        if draft_box_id:
+            cleanup_draft(client, draft_box_id)
         result = {
             "success": True,
             "reportId": report_id,
@@ -342,7 +371,7 @@ def main():
         result = {
             "success": False,
             "step": "submit",
-            "draftId": draft_id,
+            "draftId": saved_report_id,
             "message": "汇报发送失败，请检查草稿是否已保存",
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
