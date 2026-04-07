@@ -5,7 +5,7 @@ skillcode: cms-cwork-workflow
 github: https://github.com/xgjk/cwork-skills/tree/main/cwork-skills/cms-cwork-workflow
 dependencies:
   - cms-auth-skills
-version: 1.0.0
+version: 1.0.2
 tools_provided:
   - name: cwork_client
     category: exec
@@ -485,31 +485,30 @@ python3 scripts/cwork-query-report.py --mode keyword-search \
 
 ```bash
 python3 scripts/cwork-create-task.py \
-  --title "完成XXX功能" \
+  --task-main "完成XXX功能" \
   --content "详细描述" \
   --assignee "张三" \
-  --deadline 1743657600000 \
-  --grade "一般"
+  --deadline 2026-05-01
 ```
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `--title` / `-t` | ✅ | 任务标题 |
-| `--content` / `-c` | ✅ | 任务描述（needful） |
+| `--task-main` | ✅ | 任务标题 |
+| `--content` | ✅ | 任务描述（needful） |
 | `--target` | ❌ | 预期目标（默认 = content） |
 | `--assignee` | ❌ | 责任人姓名（自动解析 empId） |
-| `--reporters` | ❌ | 汇报人姓名（默认 = assignee） |
-| `--assist` | ❌ | 协办人姓名 |
-| `--supervisors` | ❌ | 监督人姓名 |
-| `--cc` | ❌ | 抄送人姓名 |
-| `--observers` | ❌ | 观察员姓名 |
-| `--deadline` / `-d` | ✅ | 截止时间（Unix ms 时间戳） |
-| `--grade` | ❌ | `一般` / `紧急` |
+| `--report-to` | ❌ | 汇报人姓名 |
+| `--assistant` | ❌ | 协办人姓名（逗号分隔多人） |
+| `--supervisor` | ❌ | 监督人姓名 |
+| `--copy` | ❌ | 抄送人姓名（逗号分隔多人） |
+| `--observer` | ❌ | 观察员姓名（逗号分隔多人） |
+| `--deadline` | ❌ | 截止时间（YYYY-MM-DD 或 Unix ms，默认 7 天后） |
+| `--push-now` | ❌ | 是否立即推送（true/false，默认 true） |
 | `--dry-run` | ❌ | 仅验证+解析，不创建 |
 
 **流程步骤**：
 1. 解析所有人员姓名 → empId
-2. 校验必填项（title、content、deadline）
+2. 校验必填项（task-main、content）
 3. 汇总所有未匹配姓名 → 报错
 4. `--dry-run` 时输出解析结果，不调用创建 API
 5. 调用 `createPlan` API 创建任务
@@ -518,58 +517,67 @@ python3 scripts/cwork-create-task.py \
 
 ### 4. 审阅汇报 — `cwork-review-report.py`
 
-**意图**：回复汇报 / 标记已读 / 获取回复链
+**意图**：回复汇报 / 标记已读 / 查询待审汇报
 
 ```bash
 # 标记已读
-python3 scripts/cwork-review-report.py --action mark-read --report-id <id>
+python3 scripts/cwork-review-report.py --mode mark-read --report-id <id>
 
 # 回复
-python3 scripts/cwork-review-report.py --action reply \
-  --report-id <id> --content-html "<p>回复内容</p>"
+python3 scripts/cwork-review-report.py --mode reply \
+  --report-id <id> --reply "回复内容"
 
-# 查看回复链
-python3 scripts/cwork-review-report.py --action replies --report-id <id>
+# 查询待审汇报列表
+python3 scripts/cwork-review-report.py --mode pending --page-size 20
 ```
 
 | 参数 | 说明 |
 |------|------|
-| `--action` / `-a` | `reply` / `mark-read` / `replies` |
-| `--report-id` | 汇报记录 ID（必填） |
-| `--content-html` | 回复内容（reply 必填） |
-| `--add-emp-ids` | 回复中 @的人（逗号分隔 empId） |
-| `--no-send-msg` | 禁止回复通知推送 |
+| `--mode` | `reply` / `mark-read` / `pending` |
+| `--report-id` | 汇报记录 ID（reply / mark-read 必填） |
+| `--reply` | 回复内容纯文本（reply 必填，脚本自动包裹 HTML） |
+| `--at` | 回复中 @的人姓名（自动解析 empId） |
+| `--page-index` | 页码（pending 模式，默认 1） |
+| `--page-size` | 每页大小（pending 模式，默认 20） |
+| `--report-type` | 汇报类型筛选 1-5（pending 模式可选） |
+| `--dry-run` | 仅预览，不调用 API |
 
 ---
 
 ### 5. 查询任务 — `cwork-query-tasks.py`
 
-**意图**：我的任务 / 我创建的 / 团队任务 / 任务详情（含汇报链）
+**意图**：我的任务 / 我创建的 / 团队任务 / 任务详情（含汇报链）/ 识别逾期和未闭环
 
 ```bash
 # 分配给我的任务
-python3 scripts/cwork-query-tasks.py my --user-id <empId> --status 1
+python3 scripts/cwork-query-tasks.py --mode my --status 1
 
 # 我创建的任务
-python3 scripts/cwork-query-tasks.py created --user-id <empId>
+python3 scripts/cwork-query-tasks.py --mode created
 
-# 团队/下属任务
-python3 scripts/cwork-query-tasks.py team --subordinate-ids "id1,id2"
+# 下属任务
+python3 scripts/cwork-query-tasks.py --mode manager --subordinate-ids "id1,id2"
 
-# 任务详情（含汇报历史链路）
-python3 scripts/cwork-query-tasks.py detail --task-id <planId> --max-reports 10
+# 任务详情（含汇报链路）
+python3 scripts/cwork-query-tasks.py --mode detail --task-id <planId>
+
+# 识别逾期任务
+python3 scripts/cwork-query-tasks.py --mode blocked --days-threshold 7
 ```
 
 | 参数 | 说明 |
 |------|------|
-| `scope` | `my` / `created` / `team` / `detail` |
-| `--user-id` | 当前用户 empId（my/created 用） |
-| `--subordinate-ids` | 下属 empId 列表（team 用） |
-| `--task-id` | 任务/计划 ID（detail 必填） |
-| `--status` | 任务状态：0=关闭 / 1=进行中 / 2=未启动 |
-| `--report-status` | 汇报状态：0=关闭 / 1=待汇报 / 2=已汇报 / 3=逾期 |
-| `--max-reports` | 详情模式下最多拉取汇报数（默认 20） |
-| `--output-raw` | 输出原始 API 响应 |
+| `--mode` | `my` / `created` / `team` / `assigned` / `detail` / `chain` / `blocked` / `unclosed` / `manager` / `nudge` |
+| `--task-id` | 任务/计划 ID（detail / chain 必填） |
+| `--subordinate-ids` | 下属 empId 列表（逗号分隔，manager 模式必填） |
+| `--assignee` | 责任人姓名（my / assigned 模式可选，自动解析 empId） |
+| `--status` | 任务状态：0=已关闭 / 1=进行中 / 2=未启动 |
+| `--report-status` | 汇报状态：1=已逾期 / 2=未逾期 |
+| `--key-word` | 关键词搜索 |
+| `--days-threshold` | 逾期天数阈值（blocked 模式，默认 7） |
+| `--page-index` | 页码（默认 1） |
+| `--page-size` | 每页大小（默认 20） |
+| `--dry-run` | 仅预览，不调用 API |
 
 ---
 
@@ -660,19 +668,17 @@ python3 scripts/cwork-query-report.py node-detail --report-id <id>
 | `--page-size` | 每页数量（默认 20） |
 | `--status` | 状态筛选 |
 | `--todo-id` | 待办 ID（complete 必填） |
-| `--content` | 完成说明（建议/反馈必填，决策可选） |
-| `--operate` | 决策操作：`agree`（同意）/ `disagree`（不同意）。**仅决策类型必填** |
+| `--content` | 完成说明（所有类型必填） |
+| `--operate` | 决策操作：`agree`（同意）/ `disagree`（不同意）（可选，默认 `complete`） |
 | `--dry-run` | 仅预览（complete 可用） |
 
 **输出格式**（complete）：
 ```json
 {
   "success": true,
+  "action": "complete",
   "todoId": "12345",
-  "todoType": "decide",
-  "operate": "agree",
-  "content": "同意该方案",
-  "message": "决策已完成"
+  "result": {}
 }
 ```
 
@@ -693,9 +699,9 @@ python3 scripts/cwork-templates.py list --begin-time 1710000000000 --end-time 17
 | 参数 | 说明 |
 |------|------|
 | `action` | `list` |
-| `--limit` | 返回数量限制（默认 50） |
-| `--begin-time` | 开始时间戳（毫秒） |
-| `--end-time` | 结束时间戳（毫秒） |
+| `--limit` | 参数已接收但当前实现未传给 API，暂无效 |
+| `--begin-time` | 参数已接收但当前实现未传给 API，暂无效 |
+| `--end-time` | 参数已接收但当前实现未传给 API，暂无效 |
 | `--output-raw` | 输出原始 API 响应 |
 
 **输出字段**：

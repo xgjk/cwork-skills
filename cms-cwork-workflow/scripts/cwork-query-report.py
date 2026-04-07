@@ -41,12 +41,24 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def _parse_date(value):
+def _parse_date(value, end_of_day: bool = False):
+    """Convert YYYY-MM-DD to millisecond timestamp (always interpreted as UTC+8).
+
+    Binds the date to UTC+8 explicitly so the result is identical regardless of
+    the system timezone where the script is executed.
+
+    end_of_day=True: returns 23:59:59.999 CST of that day so --end-date covers
+    the full Beijing calendar day (e.g. 2026-04-07 → 2026-04-07T23:59:59.999+08:00).
+    """
     if value is None:
         return None
-    from datetime import datetime
+    from datetime import datetime, timedelta, timezone
+    _CST = timezone(timedelta(hours=8))
     try:
-        return int(datetime.strptime(value, "%Y-%m-%d").timestamp() * 1000)
+        dt = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=_CST)
+        if end_of_day:
+            dt = dt + timedelta(days=1) - timedelta(milliseconds=1)
+        return int(dt.timestamp() * 1000)
     except ValueError:
         return None
 
@@ -57,6 +69,11 @@ def _die(msg):
 
 
 def main():
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
+
     args = parse_args()
     try:
         client = make_client()
@@ -113,12 +130,12 @@ def main():
             data = client.get_inbox_list(
                 page_size=args.page_size, page_index=args.page_index,
                 report_record_type=args.report_type, read_status=read_status,
-                begin_time=_parse_date(args.start_date), end_time=_parse_date(args.end_date))
+                begin_time=_parse_date(args.start_date), end_time=_parse_date(args.end_date, end_of_day=True))
         else:
             data = client.get_outbox_list(
                 page_size=args.page_size, page_index=args.page_index,
                 report_record_type=args.report_type,
-                begin_time=_parse_date(args.start_date), end_time=_parse_date(args.end_date))
+                begin_time=_parse_date(args.start_date), end_time=_parse_date(args.end_date, end_of_day=True))
 
         print(json.dumps({"success": True, "data": data}, ensure_ascii=False, indent=2))
 
