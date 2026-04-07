@@ -17,6 +17,32 @@ import urllib.error
 import argparse
 from datetime import datetime
 
+
+# ---------------------------------------------------------------------------
+# HTTP redirect handler — preserves method on 307/308
+# ---------------------------------------------------------------------------
+
+class _MethodPreservingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """urllib 默认不跟随 307 的 POST 请求；此 handler 保留原始 method 和 body。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_headers = {k: v for k, v in req.header_items()
+                       if k.lower() not in ("host", "content-length")}
+        return urllib.request.Request(
+            newurl,
+            data=req.data,
+            headers=new_headers,
+            method=req.method,
+            origin_req_host=req.origin_req_host,
+            unverifiable=True,
+        )
+
+    def http_error_307(self, req, fp, code, msg, headers):
+        return self.http_error_302(req, fp, code, msg, headers)
+
+    def http_error_308(self, req, fp, code, msg, headers):
+        return self.http_error_302(req, fp, code, msg, headers)
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -72,8 +98,11 @@ class CWorkClient:
 
     def _request(self, req: urllib.request.Request) -> dict:
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read())
+            opener = urllib.request.build_opener(_MethodPreservingRedirectHandler)
+            with opener.open(req, timeout=30) as resp:
+                raw = resp.read()
+                charset = resp.headers.get_content_charset() or "utf-8"
+                result = json.loads(raw.decode(charset))
         except urllib.error.HTTPError as e:
             raise CWorkError(f"HTTP {e.code}: {e.reason}")
         except urllib.error.URLError as e:
@@ -590,14 +619,27 @@ def resolve_names_to_empids(client: CWorkClient, names: list[str]) -> list[str]:
     return empids
 
 
+def _write_utf8(text: str, stream=None) -> None:
+    """Write text as UTF-8 to stream's binary buffer, falling back to print."""
+    target = stream or sys.stdout
+    try:
+        target.buffer.write((text + "\n").encode("utf-8"))
+        target.buffer.flush()
+    except AttributeError:
+        print(text, file=target)
+
+
 def output_json(data: dict) -> None:
-    """Output JSON to stdout."""
-    print(json.dumps(data, ensure_ascii=False, indent=2))
+    """Output JSON to stdout (UTF-8, regardless of terminal codepage)."""
+    _write_utf8(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def output_error(message: str) -> None:
-    """Output error JSON and exit."""
-    print(json.dumps({"success": False, "message": message}, ensure_ascii=False, indent=2), file=sys.stderr)
+    """Output error JSON to stderr (UTF-8) and exit."""
+    _write_utf8(
+        json.dumps({"success": False, "message": message}, ensure_ascii=False, indent=2),
+        sys.stderr,
+    )
     sys.exit(1)
 
 
