@@ -17,7 +17,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cwork_client import make_client
+from cwork_client import make_client, apply_params_file_pre_parse
 
 
 def list_todos(args):
@@ -106,7 +106,9 @@ def main():
         description="CWork 待办管理",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    
+    parser.add_argument("--params-file", dest="params_file", default=None,
+                        help="UTF-8 JSON 文件路径，从文件读取参数")
+
     subparsers = parser.add_subparsers(dest="action", help="操作类型")
     
     # list 子命令
@@ -123,8 +125,9 @@ def main():
     complete_parser.add_argument("--operate", type=str, default="complete", help="操作类型")
     complete_parser.add_argument("--dry-run", action="store_true", help="仅预览")
     
+    apply_params_file_pre_parse()
     args = parser.parse_args()
-    
+
     if not args.action:
         parser.print_help()
         sys.exit(1)

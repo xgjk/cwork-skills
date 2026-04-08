@@ -7,6 +7,7 @@ CWork API Client — 共享 API 封装
   CWORK_BASE_URL  (default: https://sg-al-cwork-web.mediportal.com.cn)
   CWORK_APP_KEY   (required)
 """
+from __future__ import annotations
 
 import os
 import json
@@ -16,6 +17,14 @@ import urllib.parse
 import urllib.error
 import argparse
 from datetime import datetime
+
+# 在模块加载时强制 stdout/stderr 使用 UTF-8，避免在 LANG=en_US 等环境下
+# argparse --help 或任何 print() 输出中文时崩溃
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except AttributeError:
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -226,12 +235,15 @@ class CWorkClient:
 
     def is_report_read(self, report_id: str | int, employee_id: str | int) -> bool:
         return self._get(
-            f"/open-api/work-report/reportInfoOpenQuery/isReportRead"
-            f"?reportId={report_id}&employeeId={employee_id}"
+            "/open-api/work-report/reportInfoOpenQuery/isReportRead",
+            {"reportId": str(report_id), "employeeId": str(employee_id)},
         )
 
     def mark_report_read(self, report_id: str | int) -> None:
-        self._get(f"/open-api/work-report/open-platform/report/readReport?reportId={report_id}")
+        self._get(
+            "/open-api/work-report/open-platform/report/readReport",
+            {"reportId": str(report_id)},
+        )
 
     # -------------------------------------------------------------------------
     # Report — reply / submit / remind
@@ -619,16 +631,27 @@ def parse_deadline(value: str | None) -> int | None:
 def resolve_names_to_empids(client: CWorkClient, names: list[str]) -> list[str]:
     """Resolve a list of names to empIds via search API.
 
-    Raises CWorkError if any name is not found or matches more than one employee.
-    The error message includes candidates (with empId/name/dept/title) so the
-    caller can surface disambiguation info to the agent or user.
+    Priority: internal employees (inside) > external contacts (outside).
+    If inside has any matches, outside is ignored entirely.
+    Raises CWorkError if any name is not found or matches more than one employee
+    within the same category (inside or outside).
     """
     empids = []
     for name in names:
         result = client.search_emp_by_name(name)
         inside_list = result.get("inside", {}).get("empList", [])
-        outside_list = result.get("outside", {}).get("empList", [])
-        all_emps = inside_list + outside_list
+        # Only fall back to outside when inside has no match at all
+        if inside_list:
+            all_emps = inside_list
+        else:
+            outside_raw = result.get("outside", {})
+            if isinstance(outside_raw, dict):
+                all_emps = outside_raw.get("empList", [])
+            elif isinstance(outside_raw, list):
+                all_emps = [e for g in outside_raw if isinstance(g, dict)
+                            for e in g.get("empList", [])]
+            else:
+                all_emps = []
         if not all_emps:
             raise CWorkError(
                 f'未找到姓名为"{name}"的员工，请确认姓名或直接提供员工 ID'
@@ -651,6 +674,88 @@ def resolve_names_to_empids(client: CWorkClient, names: list[str]) -> list[str]:
             all_emps[0].get("id") or all_emps[0].get("empId") or all_emps[0].get("empid")
         )
     return empids
+
+
+def apply_params_file(args) -> None:
+    """[Deprecated: use apply_params_file_pre_parse() instead]
+    Post-parse merge — cannot satisfy required argparse args from file.
+    """
+    apply_params_file_pre_parse()
+
+
+def apply_params_file_pre_parse() -> None:
+    """Pre-scan sys.argv for --params-file, load JSON, and inject missing flags
+    back into sys.argv BEFORE argparse.parse_args() is called.
+
+    This allows required arguments (e.g. --mode) to be provided from a file,
+    which is the primary workaround for Windows PowerShell encoding issues when
+    passing Chinese content on the command line.
+
+    Call this at the very start of main(), before parse_args():
+
+        def main():
+            apply_params_file_pre_parse()
+            args = parse_args()
+            ...
+
+    File format example (params.json, UTF-8):
+        {
+          "mode": "inbox",
+          "content": "本周工作进展",
+          "receivers": "张三,李四"
+        }
+
+    CLI args always take precedence over file values.
+    """
+    # Step 1: find --params-file in sys.argv without a full parse
+    params_file = None
+    argv = sys.argv[1:]
+    for i, arg in enumerate(argv):
+        if arg == "--params-file" and i + 1 < len(argv):
+            params_file = argv[i + 1]
+            break
+        if arg.startswith("--params-file="):
+            params_file = arg.split("=", 1)[1]
+            break
+    if not params_file:
+        return
+
+    # Step 2: load the JSON file
+    try:
+        # utf-8-sig strips the UTF-8 BOM that PowerShell Out-File adds by default
+        with open(params_file, "r", encoding="utf-8-sig") as f:
+            file_params = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(
+            json.dumps({"success": False, "error": f"--params-file: {exc}"},
+                       ensure_ascii=False),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Step 3: build set of flags already present in sys.argv (CLI wins)
+    existing_flags: set[str] = set()
+    for arg in sys.argv[1:]:
+        if arg.startswith("--"):
+            existing_flags.add(arg.split("=")[0])
+
+    # Step 4: append missing flags to sys.argv
+    extra: list[str] = []
+    for key, value in file_params.items():
+        flag = f"--{key}"
+        if flag in existing_flags:
+            continue
+        if isinstance(value, bool):
+            if value:
+                extra.append(flag)
+        elif isinstance(value, list):
+            for v in value:
+                extra.extend([flag, str(v)])
+        else:
+            extra.extend([flag, str(value)])
+
+    if extra:
+        sys.argv.extend(extra)
 
 
 def _write_utf8(text: str, stream=None) -> None:

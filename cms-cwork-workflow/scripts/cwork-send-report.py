@@ -21,7 +21,7 @@ from pathlib import Path
 
 # Allow running as `python3 scripts/send-report.py` from skill root
 sys.path.insert(0, str(Path(__file__).parent))
-from cwork_api import make_client, CWorkError
+from cwork_api import make_client, CWorkError, apply_params_file_pre_parse
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +69,10 @@ def parse_args():
         "--draft-id", dest="draft_id", default=None,
         help="汇报 ID（report ID），用于更新已有草稿；来自上次 --preview-only 输出的 draftId 字段"
     )
+    p.add_argument(
+        "--params-file", dest="params_file", default=None,
+        help="UTF-8 JSON 文件路径，从文件读取参数（用于 Windows 下传递中文内容）"
+    )
     return p.parse_args()
 
 
@@ -88,23 +92,26 @@ def resolve_receivers(client, names: list[str]) -> dict:
             results[name] = {"status": "error", "message": str(e)}
             continue
 
-        inside_list = data.get("inside", {})
-        inside = inside_list.get("empList", []) if isinstance(inside_list, dict) else []
-        
-        outside_raw = data.get("outside")
-        if isinstance(outside_raw, list) and len(outside_raw) > 0:
-            outside = outside_raw[0].get("empList", []) if isinstance(outside_raw[0], dict) else []
-        elif isinstance(outside_raw, dict):
-            outside = outside_raw.get("empList", [])
-        else:
-            outside = []
-        
-        all_emps = inside + outside
+        inside_raw = data.get("inside", {})
+        inside = inside_raw.get("empList", []) if isinstance(inside_raw, dict) else []
 
-        if len(all_emps) == 0:
+        # Priority: internal employees first; only check outside if inside is empty
+        if inside:
+            candidates = inside
+        else:
+            outside_raw = data.get("outside")
+            if isinstance(outside_raw, dict):
+                candidates = outside_raw.get("empList", [])
+            elif isinstance(outside_raw, list):
+                candidates = [e for g in outside_raw if isinstance(g, dict)
+                              for e in g.get("empList", [])]
+            else:
+                candidates = []
+
+        if len(candidates) == 0:
             results[name] = {"status": "not_found"}
-        elif len(all_emps) == 1:
-            emp = all_emps[0]
+        elif len(candidates) == 1:
+            emp = candidates[0]
             results[name] = {
                 "status": "found",
                 "empId": emp["id"],
@@ -118,7 +125,7 @@ def resolve_receivers(client, names: list[str]) -> dict:
                 "employees": [
                     {"empId": e["id"], "name": e["name"],
                      "title": e.get("title", ""), "dept": e.get("mainDept", "")}
-                    for e in all_emps
+                    for e in candidates
                 ],
             }
     return results
@@ -293,6 +300,11 @@ def cleanup_draft(client, draft_id: str):
 # ---------------------------------------------------------------------------
 
 def main():
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
+    apply_params_file_pre_parse()
     args = parse_args()
     client = make_client()
 

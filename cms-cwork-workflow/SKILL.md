@@ -658,7 +658,7 @@ python3 scripts/cwork-todo.py complete \
   --content "已补充相关数据，详见附件"
 
 # 查看汇报详情（含节点与处理意见）
-python3 scripts/cwork-query-report.py node-detail --report-id <id>
+python3 scripts/cwork-query-report.py --mode node-detail --report-id <id>
 ```
 
 | 参数 | 说明 |
@@ -699,9 +699,9 @@ python3 scripts/cwork-templates.py list --begin-time 1710000000000 --end-time 17
 | 参数 | 说明 |
 |------|------|
 | `action` | `list` |
-| `--limit` | 参数已接收但当前实现未传给 API，暂无效 |
-| `--begin-time` | 参数已接收但当前实现未传给 API，暂无效 |
-| `--end-time` | 参数已接收但当前实现未传给 API，暂无效 |
+| `--limit` | 返回数量限制（默认 50） |
+| `--begin-time` | 开始时间戳（毫秒） |
+| `--end-time` | 结束时间戳（毫秒） |
 | `--output-raw` | 输出原始 API 响应 |
 
 **输出字段**：
@@ -742,6 +742,25 @@ python3 scripts/cwork-templates.py list --begin-time 1710000000000 --end-time 17
 | — | `get_sender_history()` ✨ v3.1.1 新增 |
 | — | `search_reports_by_keyword()` ✨ v3.1.1 新增 |
 
+### `submit_report` — `reportLevelList` 字段格式
+
+`submit_report()` 的 `report_level_list` 参数（对应 API 字段 `reportLevelList`）用于在发送时指定建议人/决策人/传阅节点，每个节点结构如下：
+
+```python
+report_level_list = [
+    {
+        "level": 1,                              # 节点序号（从1开始）
+        "nodeName": "建议人",                     # 节点显示名称
+        "type": "suggest",                       # suggest=建议 | decide=决策 | read=传阅
+        "levelUserList": [
+            {"empId": 1512393035869810694},       # empId 必须是整数（非字符串）
+        ],
+    }
+]
+```
+
+> ⚠️ `levelUserList` 是必填字段，不可为 `null` 或空列表；`人员`/`分组`/`部门` 是 App 端的中文显示名，**不是** API 字段名。
+
 ## 目录结构
 
 ```
@@ -771,7 +790,7 @@ cms-cwork-workflow/
 
 ```
 用户：「帮我看看今天有没有未读汇报」
-Agent → exec: python3 scripts/cwork-query-report.py unread --page-size 10
+Agent → exec: python3 scripts/cwork-query-report.py --mode unread --page-size 10
 Agent ← JSON → 摘要呈现给用户
 ```
 

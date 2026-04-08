@@ -4,6 +4,7 @@ Environment variables:
   CWORK_BASE_URL  (default: https://sg-al-cwork-web.mediportal.com.cn)
   CWORK_APP_KEY   (required)
 """
+from __future__ import annotations
 
 import os
 import json
@@ -11,6 +12,12 @@ import sys
 import urllib.request
 import urllib.parse
 import urllib.error
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except AttributeError:
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -200,14 +207,14 @@ class CWorkClient:
         self, report_id: str | int, employee_id: str | int
     ) -> bool:
         return self._get(
-            "/open-api/work-report/reportInfoOpenQuery/isReportRead"
-            f"?reportId={report_id}&employeeId={employee_id}"
+            "/open-api/work-report/reportInfoOpenQuery/isReportRead",
+            {"reportId": str(report_id), "employeeId": str(employee_id)},
         )
 
     def mark_report_read(self, report_id: str | int) -> None:
         self._get(
-            "/open-api/work-report/open-platform/report/readReport"
-            f"?reportId={report_id}"
+            "/open-api/work-report/open-platform/report/readReport",
+            {"reportId": str(report_id)},
         )
 
     # -------------------------------------------------------------------------
@@ -506,8 +513,66 @@ class CWorkClient:
 
 
 # ---------------------------------------------------------------------------
-# Convenience factory
+# Convenience factory & CLI helpers
 # ---------------------------------------------------------------------------
+
+def apply_params_file(args) -> None:
+    """[Deprecated: use apply_params_file_pre_parse() instead]"""
+    apply_params_file_pre_parse()
+
+
+def apply_params_file_pre_parse() -> None:
+    """Pre-scan sys.argv for --params-file, load JSON, inject missing flags into
+    sys.argv BEFORE argparse.parse_args() is called.
+
+    Call at the very start of main():
+        def main():
+            apply_params_file_pre_parse()
+            args = parse_args()
+    """
+    params_file = None
+    argv = sys.argv[1:]
+    for i, arg in enumerate(argv):
+        if arg == "--params-file" and i + 1 < len(argv):
+            params_file = argv[i + 1]
+            break
+        if arg.startswith("--params-file="):
+            params_file = arg.split("=", 1)[1]
+            break
+    if not params_file:
+        return
+
+    try:
+        # utf-8-sig strips the UTF-8 BOM that PowerShell Out-File adds by default
+        with open(params_file, "r", encoding="utf-8-sig") as f:
+            file_params = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(json.dumps({"success": False, "error": f"--params-file: {exc}"},
+                         ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
+
+    existing_flags: set[str] = set()
+    for arg in sys.argv[1:]:
+        if arg.startswith("--"):
+            existing_flags.add(arg.split("=")[0])
+
+    extra: list[str] = []
+    for key, value in file_params.items():
+        flag = f"--{key}"
+        if flag in existing_flags:
+            continue
+        if isinstance(value, bool):
+            if value:
+                extra.append(flag)
+        elif isinstance(value, list):
+            for v in value:
+                extra.extend([flag, str(v)])
+        else:
+            extra.extend([flag, str(value)])
+
+    if extra:
+        sys.argv.extend(extra)
+
 
 def make_client() -> CWorkClient:
     app_key = os.environ.get("CWORK_APP_KEY")
