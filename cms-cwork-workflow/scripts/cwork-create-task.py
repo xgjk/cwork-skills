@@ -62,23 +62,36 @@ def main():
         return resolve_names_to_empids(client, names)
 
     dl = parse_deadline(args.deadline) if args.deadline else _DEFAULT_MS
+    report_to = args.report_to or args.assignee
+    if not report_to:
+        _die("--report-to 或 --assignee 至少需要提供一个（API 要求 reportEmpIdList 必填）")
     info = dict(assignee=args.assignee, assistant=args.assistant, supervisor=args.supervisor,
-                copy=args.copy, observer=args.observer, reportTo=args.report_to, deadlineMs=dl)
+                copy=args.copy, observer=args.observer, reportTo=report_to, deadlineMs=dl)
 
     if args.dry_run:
         print(json.dumps({"success": True, "dryRun": True,
-            "task": dict(main=args.task_main, content=args.content, target=args.target or args.content,
-                         deadline=args.deadline, deadlineMs=dl, pushNow=args.push_now),
+            "task": dict(
+                main=args.task_main,
+                content=args.content,
+                target=args.target or args.content,
+                deadline=args.deadline,
+                deadlineMs=dl,
+                pushNow=args.push_now,
+            ),
             "resolved": info}, ensure_ascii=False, indent=2))
         return
 
     try:
         pid = client.create_plan(
-            main=args.task_main, needful=args.content, target=args.target or "", end_time=dl,
+            main=args.task_main,
+            needful=args.content,
+            target=args.target or args.content,
+            end_time=dl,
             owner_emp_id_list=_resolve(args.assignee), assist_emp_id_list=_resolve(args.assistant),
             supervisor_emp_id_list=_resolve(args.supervisor), copy_emp_id_list=_resolve(args.copy),
-            observer_emp_id_list=_resolve(args.observer), report_emp_id_list=_resolve(args.report_to),
-            push_now=args.push_now)
+            observer_emp_id_list=_resolve(args.observer), report_emp_id_list=_resolve(report_to),
+            push_now=args.push_now,
+        )
         print(json.dumps({"success": True, "planId": pid,
             "task": dict(main=args.task_main, deadline=args.deadline, deadlineMs=dl),
             "resolved": info}, ensure_ascii=False, indent=2))

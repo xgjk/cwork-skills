@@ -33,25 +33,27 @@ def list_todos(args):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     
-    # 结构化输出
-    rows = result.get("rows", [])
+    # 5.15 返回 PageInfo：列表在 ``list``（见开放 API 6.3），非 ``rows``
+    rows = result.get("list") or result.get("rows") or []
     total = result.get("total", len(rows))
-    
+
     output = {
         "success": True,
         "action": "list",
         "total": total,
         "items": [
             {
-                "id": item.get("id"),
-                "title": item.get("title") or item.get("main"),
-                "type": item.get("type"),
+                "todoId": item.get("todoId"),
+                "reportId": item.get("reportId"),
+                "id": item.get("todoId"),
+                "title": item.get("main") or item.get("title"),
+                "type": item.get("todoType") or item.get("type"),
                 "status": item.get("status"),
                 "createTime": item.get("createTime"),
-                "creator": item.get("creatorName"),
+                "creator": item.get("writeEmpName") or item.get("creatorName"),
             }
             for item in rows
-        ]
+        ],
     }
     
     print(json.dumps(output, ensure_ascii=False, indent=2))
@@ -122,7 +124,9 @@ def main():
     complete_parser = subparsers.add_parser("complete", help="完成待办")
     complete_parser.add_argument("--todo-id", type=str, required=True, help="待办 ID")
     complete_parser.add_argument("--content", type=str, required=True, help="完成说明")
-    complete_parser.add_argument("--operate", type=str, default="complete", help="操作类型")
+    complete_parser.add_argument("--operate", type=str, default=None,
+                                     choices=["agree", "disagree"],
+                                     help="决策操作: agree=同意, disagree=不同意（仅决策类待办需要）")
     complete_parser.add_argument("--dry-run", action="store_true", help="仅预览")
     
     apply_params_file_pre_parse()

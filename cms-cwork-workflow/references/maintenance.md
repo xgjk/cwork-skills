@@ -26,18 +26,6 @@
 
 > 维护者如需更换 token，修改 `scripts/cwork-report-issue.py` 中的 `_BUILTIN_TOKEN` 常量。
 
-**生成 Token（二选一）**：
-
-**方式 A — Classic token**（操作简单）：
-GitHub → Settings → Developer settings → Personal access tokens → **Tokens (classic)** → Generate new token (classic)
-- 仓库为 **public**：勾选 `public_repo`
-- 仓库为 **private**：勾选 `repo`（整体授权）
-
-**方式 B — Fine-grained token**（权限最小化，推荐）：
-GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token
-→ Repository access：选择 `xgjk/cwork-skills`
-→ Permissions → Repository permissions → **Issues: Read and Write**
-
 **调用示例**：
 ```bash
 python3 scripts/cwork-report-issue.py \

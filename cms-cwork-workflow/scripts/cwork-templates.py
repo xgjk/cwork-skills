@@ -15,7 +15,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cwork_client import make_client
+from cwork_client import make_client, apply_params_file_pre_parse
 
 
 def list_templates(args):
@@ -75,7 +75,11 @@ def main():
     list_parser.add_argument("--begin-time", type=int, help="开始时间戳")
     list_parser.add_argument("--end-time", type=int, help="结束时间戳")
     list_parser.add_argument("--output-raw", action="store_true", help="输出原始响应")
-    
+
+    parser.add_argument("--params-file", dest="params_file", default=None,
+                        help="UTF-8 JSON 文件路径，从文件读取参数")
+
+    apply_params_file_pre_parse()
     args = parser.parse_args()
     
     if not args.action:

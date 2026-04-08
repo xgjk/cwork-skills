@@ -254,6 +254,7 @@ class CWorkClient:
         main: str,
         content_html: str,
         *,
+        report_id: str | None = None,
         content_type: str = "html",
         type_id: int = 9999,
         grade: str = "一般",
@@ -265,8 +266,8 @@ class CWorkClient:
         report_level_list: list[dict] | None = None,
         file_vo_list: list[dict] | None = None,
     ) -> dict:
-        """Returns {id: string}"""
-        return self._post("/open-api/work-report/report/record/submit", {
+        """Submit a report. Pass report_id to promote an existing draft."""
+        payload = {
             "appKey": self.app_key,
             "main": main,
             "contentHtml": content_html,
@@ -280,7 +281,10 @@ class CWorkClient:
             "copyEmpIdList": copy_emp_id_list,
             "reportLevelList": report_level_list,
             "fileVOList": file_vo_list,
-        })
+        }
+        if report_id is not None:
+            payload["id"] = report_id
+        return self._post("/open-api/work-report/report/record/submit", payload)
 
     def reply_report(
         self,
@@ -311,6 +315,7 @@ class CWorkClient:
         content_html: str,
         *,
         draft_id: str | None = None,
+        id: str | None = None,  # noqa: A002 — 兼容误用 save_draft(id=汇报id) 的调用方
         content_type: str = "markdown",
         type_id: int = 9999,
         grade: str = "一般",
@@ -322,6 +327,9 @@ class CWorkClient:
         report_level_list: list[dict] | None = None,
         file_vo_list: list[dict] | None = None,
     ) -> dict:
+        effective_draft_id = draft_id if draft_id is not None else id
+        if draft_id is not None and id is not None and str(draft_id) != str(id):
+            raise ValueError("save_draft: pass only one of draft_id and id")
         payload = {
             "appKey": self.app_key,
             "main": main,
@@ -337,11 +345,12 @@ class CWorkClient:
             "reportLevelList": report_level_list,
             "fileVOList": file_vo_list,
         }
-        if draft_id is not None:
-            payload["id"] = draft_id
+        if effective_draft_id is not None:
+            payload["id"] = effective_draft_id
         return self._post("/open-api/work-report/draftBox/saveOrUpdate", payload)
 
     def list_drafts(self, page_index: int, page_size: int) -> dict:
+        """5.24 草稿箱分页。``data.list[]`` 中 ``id`` 为草稿箱记录 id（用于 5.26 删除）；``businessId`` 为汇报 id（``bizType=report`` 时）。"""
         return self._post("/open-api/work-report/draftBox/listByPage", {
             "pageIndex": page_index,
             "pageSize": page_size,
@@ -350,8 +359,50 @@ class CWorkClient:
     def get_draft_detail(self, report_record_id: str) -> dict:
         return self._get(f"/open-api/work-report/draftBox/detail/{report_record_id}")
 
+    def submit_draft(self, report_id: str) -> bool:
+        """API 5.27: 将草稿转为正式汇报发出。路径参数 id 为汇报 id（与 saveOrUpdate 返回的 id 一致）。"""
+        rid = urllib.parse.quote(str(report_id), safe="")
+        return bool(self._post(f"/open-api/work-report/draftBox/submit/{rid}"))
+
     def delete_draft(self, draft_id: str) -> bool:
-        return self._post(f"/open-api/work-report/draftBox/delete/{draft_id}")
+        """5.26 删除草稿。路径 ``id`` 必须是 **5.24 列表项的 ``id``**（草稿箱记录主键）。
+
+        **不是** ``businessId``，也**不是** 汇报 id（与 5.25/5.27、``--draft-id`` 所用相同的那份汇报 id 不同）。
+        误传汇报 id 时，部分环境仍可能返回 ``data: true``，但草稿仍在列表中。
+        若只有汇报 id，请用 ``delete_draft_by_report_id``。
+        """
+        did = urllib.parse.quote(str(draft_id), safe="")
+        return bool(self._post(f"/open-api/work-report/draftBox/delete/{did}"))
+
+    def delete_draft_by_report_id(
+        self,
+        report_id: str | int,
+        *,
+        page_size: int = 50,
+        max_pages: int = 20,
+    ) -> bool:
+        """按汇报 id 删除草稿：先 5.24 查找 ``bizType=report`` 且 ``businessId`` 匹配的行，再 5.26。
+
+        未在列表中找到对应行时返回 ``False``（不调用删除接口）。
+        """
+        rid = str(report_id)
+        for page in range(1, max_pages + 1):
+            data = self.list_drafts(page_index=page, page_size=page_size)
+            items = data.get("list") or []
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                if row.get("bizType") != "report":
+                    continue
+                if str(row.get("businessId")) != rid:
+                    continue
+                box_id = row.get("id")
+                if box_id is None:
+                    continue
+                return self.delete_draft(str(box_id))
+            if len(items) < page_size:
+                break
+        return False
 
     # -------------------------------------------------------------------------
     # Tasks
@@ -437,6 +488,7 @@ class CWorkClient:
         )
 
     def get_todo_list(self, page_index: int, page_size: int, *, status: str | None = None) -> dict:
+        """5.15 待办列表。成功时 ``data`` 为 PageInfo（``total`` + ``list``，见开放 API 6.3 / 6.18）。"""
         params = {"pageIndex": page_index, "pageSize": page_size}
         if status:
             params["status"] = status
@@ -450,13 +502,15 @@ class CWorkClient:
         content_type: str = "html",
         operate: str | None = None,
     ) -> bool:
-        return self._post("/open-api/work-report/open-platform/todo/completeTodo", {
+        payload: dict = {
             "appKey": self.app_key,
             "todoId": todo_id,
             "content": content,
             "contentType": content_type,
-            "operate": operate,
-        })
+        }
+        if operate is not None:
+            payload["operate"] = operate
+        return self._post("/open-api/work-report/open-platform/todo/completeTodo", payload)
 
     # -------------------------------------------------------------------------
     # File upload
@@ -612,6 +666,31 @@ def make_client() -> CWorkClient:
 # CLI argument helpers
 # ---------------------------------------------------------------------------
 
+def flatten_emp_search_bucket(raw) -> list:
+    """Normalize ``inside`` / ``outside`` from searchEmpByName to a flat emp dict list.
+
+    API may return a dict with ``empList``, a list of group dicts (each with
+    ``empList``), or a flat list of employee records.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, dict):
+        emp_list = raw.get("empList")
+        return list(emp_list) if isinstance(emp_list, list) else []
+    if isinstance(raw, list):
+        out: list = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            nested = item.get("empList")
+            if isinstance(nested, list) and nested:
+                out.extend(nested)
+            elif item.get("id") is not None or item.get("empId") is not None or item.get("empid") is not None:
+                out.append(item)
+        return out
+    return []
+
+
 def parse_deadline(value: str | None) -> int | None:
     """Parse deadline string to milliseconds timestamp."""
     if value is None:
@@ -639,19 +718,12 @@ def resolve_names_to_empids(client: CWorkClient, names: list[str]) -> list[str]:
     empids = []
     for name in names:
         result = client.search_emp_by_name(name)
-        inside_list = result.get("inside", {}).get("empList", [])
+        inside_list = flatten_emp_search_bucket(result.get("inside"))
         # Only fall back to outside when inside has no match at all
         if inside_list:
             all_emps = inside_list
         else:
-            outside_raw = result.get("outside", {})
-            if isinstance(outside_raw, dict):
-                all_emps = outside_raw.get("empList", [])
-            elif isinstance(outside_raw, list):
-                all_emps = [e for g in outside_raw if isinstance(g, dict)
-                            for e in g.get("empList", [])]
-            else:
-                all_emps = []
+            all_emps = flatten_emp_search_bucket(result.get("outside"))
         if not all_emps:
             raise CWorkError(
                 f'未找到姓名为"{name}"的员工，请确认姓名或直接提供员工 ID'

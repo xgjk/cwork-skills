@@ -72,7 +72,8 @@ cms-cwork-workflow/
 | `/open-api/work-report/draftBox/saveOrUpdate` | `save_draft()` |
 | `/open-api/work-report/draftBox/listByPage` | `list_drafts()` |
 | `/open-api/work-report/draftBox/detail/{id}` | `get_draft_detail()` |
-| `/open-api/work-report/draftBox/delete/{id}` | `delete_draft()` |
+| `/open-api/work-report/draftBox/delete/{id}` | `delete_draft()`（路径 id = 5.24 列表项 `id`）；`delete_draft_by_report_id()`（按 `businessId` 查列表再删） |
+| `/open-api/work-report/draftBox/submit/{id}` | `submit_draft()`（5.27，路径 id 为汇报 id） |
 | `/open-api/cwork-file/uploadWholeFile` | `upload_file()` |
 | `/open-api/work-report/template/listTemplates` | `list_templates()` |
 | `/open-api/work-report/reportInfoOpenQuery/todoList` | `get_todo_list()` |
@@ -90,7 +91,7 @@ cms-cwork-workflow/
 | 审阅回复 | `cwork-review-report.py` | `reply_report()`, `mark_report_read()` | `{"success": true, "result": {...}}` |
 | 催办闭环 | `cwork-nudge-report.py` | `submit_report(type=12)`, `complete_todo()` | `{"success": true, "action": "nudge"}` |
 | 创建任务 | `cwork-create-task.py` | `create_plan()`, `search_emp_by_name()` | `{"success": true, "planId": "..."}` |
-| 发送汇报 | `cwork-send-report.py` | `submit_report()`, `upload_file()` | `{"success": true, "reportId": "..."}` |
+| 发送汇报 | `cwork-send-report.py` | `save_draft()`, `get_draft_detail()`, `submit_draft()`（5.27）, `upload_file()` | `{"success": true, "reportId": "..."}` |
 | 待办管理 | `cwork-todo.py` | `get_todo_list()`, `complete_todo()` | `{"success": true, "todos": [...]}` |
 | 模板管理 | `cwork-templates.py` | `list_templates()` | `{"success": true, "templates": [...]}` |
 
