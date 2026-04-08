@@ -5,19 +5,13 @@ skillcode: cms-cwork-workflow
 github: https://github.com/xgjk/cwork-skills/tree/main/cwork-skills/cms-cwork-workflow
 dependencies:
   - cms-auth-skills
-version: 1.0.2
+version: 1.0.3
 tools_provided:
   - name: cwork_client
     category: exec
     risk_level: medium
     permission: exec
-    description: CWork API底层HTTP客户端，处理认证和请求封装
-    status: active
-  - name: cwork_api
-    category: exec
-    risk_level: medium
-    permission: exec
-    description: CWork API高级封装，提供业务级接口
+    description: CWork API共享客户端，封装HTTP请求、认证和所有业务API方法
     status: active
   - name: cwork-search-emp
     category: exec
@@ -73,170 +67,15 @@ tools_provided:
     permission: read
     description: 查询汇报模板列表
     status: active
+  - name: cwork-report-issue
+    category: exec
+    risk_level: low
+    permission: read
+    description: 自动上报问题到 GitHub Issues（需环境变量 GITHUB_TOKEN）
+    status: active
 ---
 
-# cms-cwork-workflow — Agent-First Architecture
-
-## 🚀 快速开始
-
-### 发送汇报（推荐流程）
-
-```
-1. 搜索员工确认接收人
-python3 scripts/cwork-search-emp.py --name "张三"
-
-2. 保存草稿（预览）
-python3 scripts/cwork-send-report.py \
-  --title "周报" \
-  --content-html "<p>汇报内容</p>" \
-  --receivers "张三" \
-  --preview-only
-
-3. 确认发送
-python3 scripts/cwork-send-report.py \
-  --title "周报" \
-  --content-html "<p>汇报内容</p>" \
-  --receivers "张三"
-```
-
-### 查询待办
-
-```
-python3 scripts/cwork-todo.py --list
-```
-
-## 推荐工作流程
-
-### 汇报发送标准流程
-
-**推荐**：草稿 → 预览 → 发送（3步）
-
-```
-draft → preview → submit
-```
-
-| 步骤 | 命令 | 说明 |
-|------|------|------|
-| 1. 保存草稿 | `cwork-send-report.py` | 存入草稿箱 |
-| 2. 预览确认 | `cwork-query-report.py --inbox --type draft` | 查看草稿内容 |
-| 3. 确认发送 | `cwork-send-report.py --confirm` | 正式发送 |
-
-**注意**：`--preview-only` 参数只保存草稿不发送，适合需要用户确认的场景。
-
-### API 端点概览
-
-| 功能 | 端点 |
-|------|------|
-| 搜索员工 | `/open-api/employee/simpleList` |
-| 保存草稿 | `/open-api/work-report/draftBox/saveOrUpdate` |
-| 发送汇报 | `/open-api/work-report/report/record/submit` |
-| 查询汇报 | `/open-api/work-report/inbox/pageList` |
-| 创建任务 | `/open-api/work-task/task/createTask` |
-| 待办管理 | `/open-api/work-report/todo/v2/queryPageList` |
-
-## ⚠️ 强制规则（MUST READ）
-
-**所有 CWork API 调用必须使用本 Skill 提供的 Python 脚本，禁止直接使用 curl/HTTP 调用。**
-
-### 为什么必须使用脚本？
-
-#### 1. URL 编码自动处理
-**问题**：API 要求中文参数 URL 编码（UTF-8）
-
-```bash
-# ❌ 错误：中文未编码 → 400 Bad Request
-curl "https://.../searchEmpByName?searchKey=张"
-
-# ✅ 正确：脚本自动编码
-python3 scripts/cwork_api.py search-emp --name "张"
-```
-
-#### 2. 参数验证完整
-**问题**：API 有复杂的参数要求
-
-```bash
-# ❌ 手动调用：缺少参数 → 400/500 错误
-curl -X POST "https://.../submit" -d '{"title":"周报"}'
-
-# ✅ 脚本自动验证：提前报错
-python3 scripts/cwork-send-report.py --title "周报"
-# Error: --content-html is required
-```
-
-#### 3. 错误处理统一
-**问题**：API 错误信息不明确
-
-```bash
-# ❌ 手动调用：看不出具体错误
-curl "https://.../submit"
-# {"resultCode":0,"resultMsg":null}
-
-# ✅ 脚本提供清晰错误
-python3 scripts/cwork-send-report.py --title "周报"
-# {"success":false,"error":"缺少必填项 --content-html","suggestion":"请提供汇报正文"}
-```
-
-#### 4. 重试机制
-**问题**：网络异常导致失败
-
-```bash
-# ❌ 手动调用：网络抖动直接失败
-curl "https://.../api"  # timeout
-
-# ✅ 脚本自动重试：提升成功率
-python3 scripts/cwork_api.py ...  # 自动重试 3 次
-```
-
-### 违规示例（❌ 禁止）
-
-```bash
-# ❌ 禁止：未使用脚本，中文未编码
-curl "https://.../searchEmpByName?searchKey=张"
-
-# ❌ 禁止：未使用脚本，缺少参数验证
-curl -X POST "https://.../submit" -d '{"title":"..."}'
-
-# ❌ 禁止：未使用脚本，类型错误
-curl -d '{"empId":"1514822118611259394"}' ...  # 应该是数字不是字符串
-```
-
-### 正确示例（✅ 必须）
-
-```bash
-# ✅ 正确：使用搜索脚本
-python3 scripts/cwork-query-report.py --mode inbox --page-size 20
-
-# ✅ 正确：使用发送脚本
-python3 scripts/cwork-send-report.py \
-  --title "周报" \
-  --content-html "<p>内容</p>" \
-  --receivers "张三"
-
-# ✅ 正确：使用待办脚本
-python3 scripts/cwork-todo.py list --page-size 20
-```
-
-### 例外情况
-
-**仅当 Python 脚本不可用时**，才可使用 curl，但**必须**：
-1. 参考 `cwork_client.py` 中的编码逻辑
-2. 对中文参数进行 URL 编码（UTF-8）
-3. 手动验证所有必填参数
-4. 处理可能的错误响应
-
-### 调试技巧
-
-如果需要查看脚本的实际请求：
-
-```bash
-# 使用 --debug 参数（如果脚本支持）
-python3 scripts/cwork_api.py search-emp --name "张" --debug
-
-# 查看脚本源码中的编码逻辑
-cat scripts/cwork_client.py | grep urlencode
-```
-
----
+# cms-cwork-workflow
 
 ## 概述
 
@@ -245,10 +84,42 @@ cat scripts/cwork_client.py | grep urlencode
 **设计原则**：
 - **Agent-First**：脚本负责 API 编排，Agent 负责 LLM 推理和用户交互
 - **幂等安全**：所有写操作支持 `--dry-run` / `--preview-only`
-- **零 TypeScript 依赖**：纯 Python 3.10+，仅需标准库
-- **强制封装**：所有 API 调用必须通过脚本，禁止直接 HTTP 调用
-- **TypeScript 参考**保留在 `references/` 目录
+- **零外部依赖**：纯 Python 3.9+，仅需标准库
+- **强制封装**：所有 API 调用必须通过脚本，**禁止直接 HTTP/curl 调用**（脚本已内置 URL 编码、参数验证、错误转换、重试机制）
 
+## 快速开始
+
+### 发送汇报（标准 3 步流程）
+
+```
+1. 搜索接收人，确认 empId
+python3 scripts/cwork-search-emp.py --name "张三"
+
+2. 预览草稿（--preview-only 仅保存草稿，不发送）
+python3 scripts/cwork-send-report.py \
+  --title "周报" --content-html "<p>内容</p>" \
+  --receivers "张三" --preview-only
+
+3. 确认发送
+python3 scripts/cwork-send-report.py \
+  --title "周报" --content-html "<p>内容</p>" \
+  --receivers "张三"
+```
+
+### 其他常用命令
+
+```bash
+# 查看未读汇报
+python3 scripts/cwork-query-report.py --mode unread
+
+# 查看待办列表
+python3 scripts/cwork-todo.py list --page-size 20
+
+# 查询我的任务
+python3 scripts/cwork-query-tasks.py --mode my
+```
+
+---
 
 ## 9 个编排命令
 
@@ -713,38 +584,61 @@ python3 scripts/cwork-templates.py list --begin-time 1710000000000 --end-time 17
 
 ---
 
-## 共享 API 模块 — `cwork_api.py`
+## 辅助工具
 
-所有脚本共用 `scripts/cwork_api.py` 中的 `CWorkClient` 类。该模块封装了：
+### 问题自动上报 — `cwork-report-issue.py`
 
-| API 端点 | 方法 |
-|----------|------|
-| `/open-api/cwork-user/searchEmpByName` | `search_emp_by_name()` |
-| `/open-api/work-report/report/record/inbox` | `get_inbox_list()` |
-| `/open-api/work-report/report/record/outbox` | `get_outbox_list()` |
-| `/open-api/work-report/report/info` | `get_report_info()` |
-| `/open-api/work-report/report/record/submit` | `submit_report()` |
-| `/open-api/work-report/report/record/reply` | `reply_report()` |
-| `/open-api/work-report/reportInfoOpenQuery/unreadList` | `get_unread_list()` |
-| `/open-api/work-report/open-platform/report/readReport` | `mark_report_read()` |
-| `/open-api/work-report/report/plan/searchPage` | `search_task_page()` |
-| `/open-api/work-report/report/plan/getSimplePlanAndReportInfo` | `get_simple_plan_and_report_info()` |
-| `/open-api/work-report/open-platform/report/plan/create` | `create_plan()` |
-| `/open-api/work-report/draftBox/saveOrUpdate` | `save_draft()` |
-| `/open-api/work-report/draftBox/listByPage` | `list_drafts()` |
-| `/open-api/work-report/draftBox/detail/{id}` | `get_draft_detail()` |
-| `/open-api/work-report/draftBox/delete/{id}` | `delete_draft()` |
-| `/open-api/cwork-file/uploadWholeFile` | `upload_file()` |
-| `/open-api/work-report/template/listTemplates` | `list_templates()` |
-| `/open-api/work-report/reportInfoOpenQuery/todoList` | `get_todo_list()` |
-| `/open-api/work-report/open-platform/todo/completeTodo` | `complete_todo()` |
-| `/open-api/work-report/report/getReportNodeDetail` | `get_report_node_detail()` |
-| — | `get_sender_history()` ✨ v3.1.1 新增 |
-| — | `search_reports_by_keyword()` ✨ v3.1.1 新增 |
+**意图**：当脚本报错或 API 异常时，自动将问题提交为 GitHub Issue，便于追踪和修复。
 
-### `submit_report` — `reportLevelList` 字段格式
+**前置条件**：设置环境变量 `GITHUB_TOKEN`（详见 `references/maintenance.md`）。
 
-`submit_report()` 的 `report_level_list` 参数（对应 API 字段 `reportLevelList`）用于在发送时指定建议人/决策人/传阅节点，每个节点结构如下：
+```bash
+# 上报一个脚本报错
+python3 scripts/cwork-report-issue.py \
+  --title "bug: cwork-send-report.py 发送失败" \
+  --script cwork-send-report.py \
+  --error '{"success": false, "error": "API Error (200003): 流程节点类型不正确"}' \
+  --body "发送汇报时传入 reportLevelList，type 字段使用了中文导致报错"
+
+# 先预览，不实际提交
+python3 scripts/cwork-report-issue.py \
+  --title "bug: ..." \
+  --script cwork-query-report.py \
+  --error "..." \
+  --dry-run
+```
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--title` / `-T` | ✅ | Issue 标题 |
+| `--script` / `-s` | ❌ | 出错的脚本名称 |
+| `--error` / `-e` | ❌ | 错误信息（脚本 stderr 的 JSON 输出） |
+| `--body` / `-b` | ❌ | 问题描述（复现步骤等） |
+| `--extra` | ❌ | 附加信息（环境、版本等） |
+| `--labels` | ❌ | 额外标签（逗号分隔，默认已含 `bug` 和 `cms-cwork-workflow`） |
+| `--dry-run` | ❌ | 预览将提交的内容，不实际创建 |
+| `--token` | ❌ | GitHub Token（仅调试用，生产环境请用环境变量 `GITHUB_TOKEN`） |
+
+**输出格式**：
+```json
+{
+  "success": true,
+  "issue_number": 42,
+  "issue_url": "https://github.com/xgjk/cwork-skills/issues/42",
+  "title": "bug: cwork-send-report.py 发送失败"
+}
+```
+
+**Agent 调用建议**：
+- 脚本返回 `"success": false` 且错误类型为 API 异常（非参数错误）时，询问用户是否上报
+- 上报前使用 `--dry-run` 预览内容，确认无敏感信息（如 appKey、empId 等）后再提交
+- `--error` 传入脚本 stderr 的原始 JSON 输出即可，脚本会自动格式化
+
+---
+
+## `reportLevelList` 字段格式
+
+`cwork-send-report.py` 发送汇报时，可通过 `--report-level-list` 参数（对应 API 字段 `reportLevelList`）指定建议人/决策人/传阅节点，每个节点结构如下：
 
 ```python
 report_level_list = [
@@ -759,30 +653,9 @@ report_level_list = [
 ]
 ```
 
-> ⚠️ `levelUserList` 是必填字段，不可为 `null` 或空列表；`人员`/`分组`/`部门` 是 App 端的中文显示名，**不是** API 字段名。
+> ⚠️ `type` 只接受英文小写 `suggest` / `decide` / `read`，不接受中文。`levelUserList` 是必填字段，不可为 `null` 或空列表。
 
-## 目录结构
-
-```
-cms-cwork-workflow/
-├── SKILL.md                          ← 本文件（意图级接口文档）
-├── scripts/
-│   ├── cwork_api.py                  ← 共享 API 客户端模块
-│   ├── cwork_client.py               ← 低层 HTTP 客户端
-│   ├── cwork-search-emp.py           ← 0. 搜索员工 ✨ v3.2.0 新增
-│   ├── cwork-send-report.py          ← 1. 发送汇报
-│   ├── cwork-query-report.py         ← 2. 查询汇报
-│   ├── cwork-create-task.py          ← 3. 创建任务
-│   ├── cwork-review-report.py        ← 4. 审阅汇报
-│   ├── cwork-query-tasks.py          ← 5. 查询任务
-│   ├── cwork-nudge-report.py         ← 6. 催办闭环
-│   ├── cwork-todo.py                 ← 7. 待办管理
-│   └── cwork-templates.py            ← 8. 模板管理
-└── references/                       ← TypeScript 源码参考（保留）
-    ├── api-client.md
-    ├── api-endpoints.md
-    └── maintenance.md
-```
+---
 
 ## Agent 调用模式
 
@@ -823,9 +696,80 @@ Agent → exec: python3 scripts/cwork-nudge-report.py nudge \
           --report-id <id> --content-html "..."
 ```
 
+---
+
 ## 错误处理
 
 所有脚本遵循统一错误约定：
 - **成功**：JSON 到 stdout，含 `"success": true`
 - **失败**：JSON 到 stderr，含 `"success": false` 和 `"error"` 字段，exit code ≠ 0
 - **Agent 应同时检查 stdout 和 stderr**
+
+遇到 API 异常（如 `API Error (2xxxxx)`）时，可调用 `cwork-report-issue.py` 上报问题：
+
+```bash
+python3 scripts/cwork-report-issue.py \
+  --title "bug: <出错脚本> <简短描述>" \
+  --script "<出错脚本>.py" \
+  --error '<stderr JSON>' \
+  --body "<复现步骤>"
+```
+
+> ⚠️ 上报前确认 `--error` 和 `--body` 中不含 appKey、empId 等敏感信息。
+
+### 通用参数
+
+所有脚本均支持以下通用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `--params-file <path>` | 从 UTF-8 JSON 文件读取参数，key 与命令行参数名一致（连字符格式）。用于解决 Windows PowerShell 中文编码问题。 |
+
+**用法示例**：
+
+```json
+{
+  "title": "周报标题",
+  "content-html": "<p>汇报内容</p>",
+  "receivers": "张三"
+}
+```
+
+```bash
+python3 scripts/cwork-send-report.py --params-file params.json
+```
+
+> 文件参数与命令行参数可混用，命令行参数优先级更高。文件必须为 UTF-8 编码（带或不带 BOM 均支持）。
+
+---
+
+## 目录结构
+
+```
+cms-cwork-workflow/
+├── SKILL.md                          ← 本文件（意图级接口文档）
+├── scripts/
+│   ├── cwork_client.py               ← 共享 API 客户端（HTTP 封装 + 所有 API 方法）
+│   ├── cwork-search-emp.py           ← 0. 搜索员工 ✨ v3.2.0 新增
+│   ├── cwork-send-report.py          ← 1. 发送汇报
+│   ├── cwork-query-report.py         ← 2. 查询汇报
+│   ├── cwork-create-task.py          ← 3. 创建任务
+│   ├── cwork-review-report.py        ← 4. 审阅汇报
+│   ├── cwork-query-tasks.py          ← 5. 查询任务
+│   ├── cwork-nudge-report.py         ← 6. 催办闭环
+│   ├── cwork-todo.py                 ← 7. 待办管理
+│   └── cwork-templates.py            ← 8. 模板管理
+├── design/
+│   └── DESIGN.md                     ← 架构设计文档
+└── references/
+    └── maintenance.md                ← 维护操作说明
+```
+
+---
+
+## 参考资料
+
+> 正常调用只需按本文档使用 CLI 脚本，不必直接查阅 API 文档。
+> 遇到 API 错误码或需要扩展脚本时，可查阅以下官方文档：
+
+- **工作协同 Open API 接口文档**：[工作协同API说明.md](https://github.com/xgjk/dev-guide/blob/main/02.%E4%BA%A7%E5%93%81%E4%B8%9A%E5%8A%A1AI%E6%96%87%E6%A1%A3/%E5%B7%A5%E4%BD%9C%E5%8D%8F%E5%90%8C/%E5%B7%A5%E4%BD%9C%E5%8D%8F%E5%90%8CAPI%E8%AF%B4%E6%98%8E.md)

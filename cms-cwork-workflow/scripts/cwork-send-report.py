@@ -21,7 +21,7 @@ from pathlib import Path
 
 # Allow running as `python3 scripts/send-report.py` from skill root
 sys.path.insert(0, str(Path(__file__).parent))
-from cwork_api import make_client, CWorkError, apply_params_file_pre_parse
+from cwork_client import make_client, CWorkError, apply_params_file_pre_parse
 
 
 # ---------------------------------------------------------------------------
