@@ -23,8 +23,8 @@
 cms-cwork-workflow/
 ├── SKILL.md                           ← 产品级接口文档
 ├── scripts/
-│   ├── cwork_client.py               ← 共享 HTTP 客户端
-│   ├── cwork_api.py                  ← 共享 API 客户端模块
+│   ├── cwork_client.py               ← 共享 API 客户端（HTTP 封装 + 所有 API 方法）
+│   ├── cwork-report-issue.py         ← 辅助：问题自动上报到 GitHub
 │   ├── cwork-search-emp.py           ← 搜索员工
 │   ├── cwork-send-report.py          ← 发送汇报
 │   ├── cwork-query-report.py         ← 查询汇报
@@ -37,28 +37,49 @@ cms-cwork-workflow/
 ├── design/
 │   └── DESIGN.md                     ← 本文件
 └── references/
-    ├── api-endpoints.md              ← API 端点文档
-    ├── api-client.md                 ← Python 客户端参考
-    ├── maintenance.md                ← 维护说明
-    └── original-api-client.py        ← 原始客户端参考实现
+    └── maintenance.md                ← 维护说明
 ```
 
 ## 编排脚本架构
 
 ### 客户端层 (`cwork_client.py`)
-- 封装 HTTP 请求逻辑
+- 封装 HTTP 请求逻辑（含 307 重定向处理）
 - 统一错误处理和重试
 - 参数编码和响应解析
-
-### API 层 (`cwork_api.py`)
-- 高级业务 API 调用
-- 数据转换和验证
-- 缓存和状态管理
+- 所有业务 API 方法（`submit_report`、`save_draft` 等）
+- 共享工具函数（`resolve_names_to_empids`、`parse_deadline`、`make_client` 等）
 
 ### 编排脚本层 (`.py`)
 - argparse 命令行参数处理
 - 业务逻辑编排
 - 结构化 JSON 输出
+
+## cwork_client.py API 方法索引
+
+| API 端点 | 方法 |
+|----------|------|
+| `/open-api/cwork-user/searchEmpByName` | `search_emp_by_name()` |
+| `/open-api/work-report/report/record/inbox` | `get_inbox_list()` |
+| `/open-api/work-report/report/record/outbox` | `get_outbox_list()` |
+| `/open-api/work-report/report/info` | `get_report_info()` |
+| `/open-api/work-report/report/record/submit` | `submit_report()` |
+| `/open-api/work-report/report/record/reply` | `reply_report()` |
+| `/open-api/work-report/reportInfoOpenQuery/unreadList` | `get_unread_list()` |
+| `/open-api/work-report/open-platform/report/readReport` | `mark_report_read()` |
+| `/open-api/work-report/report/plan/searchPage` | `search_task_page()` |
+| `/open-api/work-report/report/plan/getSimplePlanAndReportInfo` | `get_simple_plan_and_report_info()` |
+| `/open-api/work-report/open-platform/report/plan/create` | `create_plan()` |
+| `/open-api/work-report/draftBox/saveOrUpdate` | `save_draft()` |
+| `/open-api/work-report/draftBox/listByPage` | `list_drafts()` |
+| `/open-api/work-report/draftBox/detail/{id}` | `get_draft_detail()` |
+| `/open-api/work-report/draftBox/delete/{id}` | `delete_draft()` |
+| `/open-api/cwork-file/uploadWholeFile` | `upload_file()` |
+| `/open-api/work-report/template/listTemplates` | `list_templates()` |
+| `/open-api/work-report/reportInfoOpenQuery/todoList` | `get_todo_list()` |
+| `/open-api/work-report/open-platform/todo/completeTodo` | `complete_todo()` |
+| `/open-api/work-report/report/getReportNodeDetail` | `get_report_node_detail()` |
+| — | `get_sender_history()` |
+| — | `search_reports_by_keyword()` |
 
 ## API 覆盖设计
 

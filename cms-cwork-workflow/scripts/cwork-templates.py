@@ -21,15 +21,26 @@ from cwork_client import make_client
 def list_templates(args):
     """查询模板列表"""
     client = make_client()
-    
-    result = client.list_templates()
+
+    result = client.list_templates(
+        limit=args.limit,
+        begin_time=getattr(args, "begin_time", None),
+        end_time=getattr(args, "end_time", None),
+    )
     
     if args.output_raw:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     
-    # 结构化输出
-    templates = result if isinstance(result, list) else result.get("rows", [])
+    # 结构化输出（API 返回 recentOperateTemplates 或 rows 或直接是列表）
+    if isinstance(result, list):
+        templates = result
+    else:
+        templates = (
+            result.get("recentOperateTemplates")
+            or result.get("rows")
+            or []
+        )
     
     output = {
         "success": True,
@@ -37,8 +48,8 @@ def list_templates(args):
         "total": len(templates),
         "items": [
             {
-                "id": t.get("id"),
-                "name": t.get("name") or t.get("templateName"),
+                "id": t.get("id") or t.get("templateId"),
+                "name": t.get("name") or t.get("templateName") or t.get("main"),
                 "type": t.get("type"),
                 "typeName": t.get("typeName"),
                 "grade": t.get("grade"),

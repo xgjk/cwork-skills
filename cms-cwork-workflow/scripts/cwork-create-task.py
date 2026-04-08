@@ -12,7 +12,7 @@ import json
 import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cwork_client import make_client, CWorkError, parse_deadline, resolve_names_to_empids
+from cwork_client import make_client, CWorkError, parse_deadline, resolve_names_to_empids, apply_params_file_pre_parse
 
 _DEFAULT_MS = int(__import__("datetime").datetime.now().timestamp() * 1000) + 7 * 86400000
 
@@ -31,6 +31,8 @@ def parse_args(argv=None):
     p.add_argument("--report-to", help="Report-to name")
     p.add_argument("--push-now", type=lambda x: x.lower() == "true", default=True)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--params-file", dest="params_file", default=None,
+                   help="UTF-8 JSON 文件路径，从文件读取参数")
     return p.parse_args(argv)
 
 
@@ -46,6 +48,7 @@ def _die(msg):
 
 
 def main():
+    apply_params_file_pre_parse()
     args = parse_args()
     try:
         client = make_client()

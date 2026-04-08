@@ -20,7 +20,7 @@ import json
 import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cwork_client import CWorkClient, make_client, CWorkError
+from cwork_client import CWorkClient, make_client, CWorkError, apply_params_file_pre_parse
 
 
 def parse_args(argv=None):
@@ -38,6 +38,8 @@ def parse_args(argv=None):
     parser.add_argument("--keyword-filter", help="Legacy: Keyword filter")
     parser.add_argument("--start-date", help="Start date YYYY-MM-DD")
     parser.add_argument("--end-date", help="End date YYYY-MM-DD")
+    parser.add_argument("--params-file", dest="params_file", default=None,
+                        help="UTF-8 JSON 文件路径，从文件读取参数")
     return parser.parse_args(argv)
 
 
@@ -74,6 +76,7 @@ def main():
     except AttributeError:
         pass
 
+    apply_params_file_pre_parse()
     args = parse_args()
     try:
         client = make_client()

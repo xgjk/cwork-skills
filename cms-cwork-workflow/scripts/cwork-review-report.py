@@ -23,7 +23,9 @@ import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cwork_client import CWorkClient, make_client, CWorkError, output_json, output_error, resolve_names_to_empids
+from cwork_client import (CWorkClient, make_client, CWorkError,
+                           output_json, output_error, resolve_names_to_empids,
+                           apply_params_file_pre_parse)
 
 
 def parse_args(argv=None):
@@ -40,10 +42,13 @@ def parse_args(argv=None):
                         help="汇报类型筛选")
     parser.add_argument("--interactive", action="store_true", help="交互模式")
     parser.add_argument("--dry-run", action="store_true", help="干跑模式")
+    parser.add_argument("--params-file", dest="params_file", default=None,
+                        help="UTF-8 JSON 文件路径，从文件读取参数")
     return parser.parse_args(argv)
 
 
 def main():
+    apply_params_file_pre_parse()
     args = parse_args()
 
     if args.dry_run:
