@@ -17,7 +17,9 @@
 
 适用：修改 `cms-cwork-workflow/scripts/`（尤其 `cwork_client.py`）、编排脚本，或 `SKILL.md` 中对接口行为、请求参数的表述。
 
-1. **写入 HTTP 请求的每一个 JSON 键名**，必须能在**当前采用的公开 API 文档**对应该接口的参数表中查到（例如维护说明中的 [工作协同 API 说明](https://github.com/xgjk/dev-guide/blob/main/02.%E4%BA%A7%E5%93%81%E4%B8%9A%E5%8A%A1AI%E6%96%87%E6%A1%A3/%E5%B7%A5%E4%BD%9C%E5%8D%8F%E5%90%8C/%E5%B7%A5%E4%BD%9C%E5%8D%8F%E5%90%8CAPI%E8%AF%B4%E6%98%8E.md)）。
+**唯一真相源**：上述 [工作协同 Open API 接口文档](https://github.com/xgjk/dev-guide/blob/main/02.%E4%BA%A7%E5%93%81%E4%B8%9A%E5%8A%A1AI%E6%96%87%E6%A1%A3/%E5%B7%A5%E4%BD%9C%E5%8D%8F%E5%90%8C/%E5%B7%A5%E4%BD%9C%E5%8D%8F%E5%90%8CAPI%E8%AF%B4%E6%98%8E.md) 是接口契约的**唯一依据**（与 `cms-cwork-workflow/references/maintenance.md` 所列一致）。**凡有争议，以文档为准**；文档**未提及**的能力、字段或语义，**不得**在客户端当作既有 Bug 去「补齐」或猜测实现，应 **判为产品/接口新需求**（须文档更新或接口方正式定义后再改代码与 SKILL）。
+
+1. **写入 HTTP 请求的每一个 JSON 键名**，必须能在**当前采用的公开 API 文档**对应该接口的参数表中查到（同上链接）。
 2. **禁止**根据 `resultMsg`、报错文案、猜测或「常见命名」**新增**文档里不存在的字段。
 3. 文档明显缺失时，**不得**在客户端自行补字段；在回复或 Issue 中写明「文档未定义，需接口方补充」。
 4. **SKILL / 脚本帮助与输出说明**：不得把未在 API 参数表中的字段写成「客户端会发送」「已支持」等既定事实；未文档化行为须标明「需确认」。（Skill 首要读者是 AI，见 §4。）
