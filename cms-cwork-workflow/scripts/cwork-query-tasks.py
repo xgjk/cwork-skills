@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cwork_client import CWorkClient, make_client, CWorkError, output_json, output_error, resolve_names_to_empids
+from cwork_client import CWorkClient, make_client, CWorkError, output_json, output_error, resolve_names_to_empids, apply_params_file_pre_parse
 
 
 def parse_args(argv=None):
@@ -44,10 +44,10 @@ def parse_args(argv=None):
     parser.add_argument("--page-size", type=int, default=20, help="每页大小（默认20）")
     parser.add_argument("--status", type=int, choices=[0, 1, 2],
                         help="任务状态: 0=已关闭, 1=进行中, 2=未启动")
-    parser.add_argument("--task-status", type=int, choices=[1, 2],
-                        help="汇报状态: 1=已逾期, 2=未逾期")
-    parser.add_argument("--report-status", type=int, choices=[1, 2],
-                        help="汇报状态（同task-status）")
+    parser.add_argument("--task-status", type=int, choices=[0, 1, 2, 3],
+                        help="汇报状态: 0=关闭, 1=待汇报, 2=已汇报, 3=逾期")
+    parser.add_argument("--report-status", type=int, choices=[0, 1, 2, 3],
+                        help="汇报状态（同task-status）: 0=关闭, 1=待汇报, 2=已汇报, 3=逾期")
     parser.add_argument("--key-word", help="关键词搜索")
     parser.add_argument("--assignee", help="责任人姓名")
     parser.add_argument("--subordinate-ids", help="下属empId列表（逗号分隔，manager模式用）")
@@ -55,10 +55,13 @@ def parse_args(argv=None):
                         help="未闭环天数阈值（默认7）")
     parser.add_argument("--interactive", action="store_true", help="交互模式")
     parser.add_argument("--dry-run", action="store_true", help="干跑模式")
+    parser.add_argument("--params-file", dest="params_file", default=None,
+                        help="UTF-8 JSON 文件路径，从文件读取参数")
     return parser.parse_args(argv)
 
 
 def main():
+    apply_params_file_pre_parse()
     args = parse_args()
 
     if args.dry_run:
@@ -106,7 +109,7 @@ def main():
             result = client.search_task_page(
                 page_size=args.page_size,
                 page_index=args.page_index,
-                report_status=1,
+                report_status=3,
                 key_word=args.key_word,
             )
             items = result if isinstance(result, list) else result.get("list", [])
@@ -120,7 +123,7 @@ def main():
             result = client.search_task_page(
                 page_size=args.page_size,
                 page_index=args.page_index,
-                report_status=2,
+                report_status=1,
                 key_word=args.key_word,
             )
             output_json({"success": True, "data": result})
@@ -177,7 +180,7 @@ def main():
             result = client.search_task_page(
                 page_size=args.page_size,
                 page_index=args.page_index,
-                report_status=1,
+                report_status=3,
                 key_word=args.key_word,
             )
             output_json({"success": True, "data": result, "message": "Use --emp-id with cwork-nudge-report.py to send nudge"})

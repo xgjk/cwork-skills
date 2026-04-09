@@ -16,9 +16,8 @@ import json
 import sys
 import os
 
-# Add parent directory to path to import cwork_client
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cwork_client import CWorkClient, CWorkError
+from cwork_client import CWorkClient, CWorkError, make_client, apply_params_file_pre_parse
 
 
 def search_employees(client: CWorkClient, search_key: str, max_results: int = 5, verbose: bool = False) -> dict:
@@ -147,11 +146,16 @@ Examples:
         action="store_true",
         help="Output raw API response"
     )
-    
+    parser.add_argument(
+        "--params-file",
+        help="从 UTF-8 JSON 文件读取参数（用于 Windows 下传递中文内容）"
+    )
+
+    apply_params_file_pre_parse()
     args = parser.parse_args()
-    
+
     try:
-        client = CWorkClient()
+        client = make_client()
         
         # Output raw response if requested
         if args.output_raw:

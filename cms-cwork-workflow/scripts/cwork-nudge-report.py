@@ -152,14 +152,6 @@ def main():
                 content_html=nudge_content,
                 type_id=REPORT_TYPE_ID,
                 accept_emp_id_list=[emp_id],
-                report_level_list=[
-                    {
-                        "level": 12,
-                        "type": "催收汇报",
-                        "nodeName": "催收汇报",
-                        "levelUserList": [{"empId": emp_id}]
-                    }
-                ],
             )
             output_json({
                 "success": True,
