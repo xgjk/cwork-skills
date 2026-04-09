@@ -266,7 +266,7 @@ python3 scripts/cwork-send-report.py \
 | `--preview-only` | ❌ | 仅保存+预览；**即使带 `--confirm-send` 也不会发出** |
 | `--draft-id` | ❌ | **值为汇报 id**（参数名历史沿用）：更新草稿或配合 `--confirm-send` 仅执行 5.27 |
 | `--confirm-send` | ❌ | **必须**在用户确认完整 `draftDetail` 后再加，才会调用 5.27 |
-| `--allow-minimal-body` | ❌ | 跳过「正文过短」校验（默认按 html/markdown 估算纯文本不足 50 字会拒绝保存草稿，减少误发占位内容） |
+| `--allow-minimal-body` | ❌ | 跳过「正文过短」校验（默认纯文本长度 **≤10** 会拒绝保存，**超过 10 字**不拦截；极短占位可加本参数） |
 
 **流程步骤**：
 1. **Resolve** — 按姓名搜索员工；本轮回填的姓名参与合并，未填则沿用 5.25 详情中的接收人/抄送

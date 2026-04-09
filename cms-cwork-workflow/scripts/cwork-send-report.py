@@ -127,7 +127,7 @@ def parse_args():
         "--allow-minimal-body",
         dest="allow_minimal_body",
         action="store_true",
-        help="允许正文过短（默认纯文本不足 50 字会拒绝保存草稿，防止误发占位内容）",
+        help="允许正文过短（默认纯文本长度 ≤10 会拒绝保存草稿；超过 10 字不拦截）",
     )
     return p.parse_args()
 
@@ -148,7 +148,8 @@ def merge_report_content_args(args) -> None:
 # Resolve / validate names
 # ---------------------------------------------------------------------------
 
-MIN_BODY_PLAIN_LEN = 50
+# 纯文本长度 ≤ 此值则拒绝保存；须 **严格大于** 该值（即至少 11 字）才放行（与 Issue #37 约定一致）
+SHORT_BODY_REJECT_IF_LEN_LE = 10
 
 
 def split_cli_name_list(s: str) -> list[str]:
@@ -503,7 +504,7 @@ def build_preview_shell(args, confirmed: list[dict], cc_confirmed: list[dict],
     prompt_plain = plain if len(plain) <= prompt_body_cap else plain[:prompt_body_cap] + "…"
 
     preview_warnings: list[str] = []
-    if plain_len < 50:
+    if plain_len <= 30:
         preview_warnings.append(
             f"summary 中的正文预览仅 {plain_len} 个字符（由草稿正文简化得到，"
             "一般应与本次 --content 长度接近），可能过短，发送前请与用户确认"
@@ -620,16 +621,17 @@ def main():
     if not args.allow_minimal_body:
         ect = effective_body_content_type(args, detail)
         plen = body_plain_length(args.content, ect)
-        if plen < MIN_BODY_PLAIN_LEN:
+        if plen <= SHORT_BODY_REJECT_IF_LEN_LE:
             print(json.dumps({
                 "success": False,
                 "step": "validate_body",
                 "error": (
-                    f"正文过短（按 {ect} 估算约 {plen} 字，阈值 {MIN_BODY_PLAIN_LEN}）。"
-                    "请补充业务内容，或显式传入 --allow-minimal-body 跳过此校验。"
+                    f"正文过短（按 {ect} 估算约 {plen} 字；须超过 {SHORT_BODY_REJECT_IF_LEN_LE} 字才保存。"
+                    "请补充内容，或显式传入 --allow-minimal-body 跳过此校验。"
                 ),
                 "contentPlainLength": plen,
                 "contentTypeUsed": ect,
+                "rejectIfPlainLengthLte": SHORT_BODY_REJECT_IF_LEN_LE,
             }, ensure_ascii=False), file=sys.stderr)
             sys.exit(1)
 
