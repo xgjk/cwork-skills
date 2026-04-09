@@ -24,7 +24,6 @@ cms-cwork-workflow/
 ├── SKILL.md                           ← 产品级接口文档
 ├── scripts/
 │   ├── cwork_client.py               ← 共享 API 客户端（HTTP 封装 + 所有 API 方法）
-│   ├── cwork-report-issue.py         ← 辅助：问题自动上报到 GitHub
 │   ├── cwork-search-emp.py           ← 搜索员工
 │   ├── cwork-send-report.py          ← 发送汇报
 │   ├── cwork-query-report.py         ← 查询汇报
@@ -33,7 +32,8 @@ cms-cwork-workflow/
 │   ├── cwork-query-tasks.py          ← 查询任务
 │   ├── cwork-nudge-report.py         ← 催办闭环
 │   ├── cwork-todo.py                 ← 待办管理
-│   └── cwork-templates.py            ← 模板管理
+│   ├── cwork-templates.py            ← 模板管理
+│   └── cwork-draft-box.py            ← 草稿箱列表 / 批量删除（5.24 / 5.28）
 ├── design/
 │   └── DESIGN.md                     ← 本文件
 └── references/
@@ -157,7 +157,7 @@ Agent → exec: python3 cwork-nudge-report.py identify --days-threshold 7
 
 ---
 
-## 实现状态 (v3.1.0)
+## 实现状态 (v1.0.0)
 
 ### ✅ 已完成
 - [x] 8个编排脚本完整实现
@@ -169,7 +169,7 @@ Agent → exec: python3 cwork-nudge-report.py identify --days-threshold 7
 - [x] **决策/建议/反馈待办完整支持**（v3.1.0 新增）
 - [x] **汇报节点详情查询**（`get_report_node_detail()`）
 
-### 🆕 v3.1.0 新增功能（2026-04-03）
+### 🆕 v1.0.1 新增功能（2026-04-03）
 | 功能 | 说明 | API 接口 |
 |------|------|----------|
 | **决策待办** | 支持同意/不同意操作 | `complete_todo(operate="agree/disagree")` |

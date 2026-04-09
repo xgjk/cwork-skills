@@ -6,7 +6,7 @@ github: https://github.com/xgjk/cwork-skills
 dependencies:
   - cms-auth-skills
 # bump 时须同步修改同目录下 version.json 的 version 字段
-version: 1.0.7
+version: 1.0.8
 tools_provided:
   - name: cwork_client
     category: exec
@@ -73,12 +73,6 @@ tools_provided:
     risk_level: high
     permission: write
     description: 草稿箱列表（5.24）与批量删除草稿（5.28）
-    status: active
-  - name: cwork-report-issue
-    category: exec
-    risk_level: low
-    permission: read
-    description: 自动上报问题到 GitHub Issues（需环境变量 GITHUB_TOKEN）
     status: active
 ---
 
@@ -709,17 +703,7 @@ Agent ← JSON（已发送催办汇报）
 - **失败**：JSON 到 stderr，含 `"success": false` 和 `"error"` 字段，exit code ≠ 0
 - **Agent 应同时检查 stdout 和 stderr**
 
-遇到 API 异常（如 `API Error (2xxxxx)`）时，可调用 `cwork-report-issue.py` 上报问题（若仓库已包含该脚本）：
-
-```bash
-python3 scripts/cwork-report-issue.py \
-  --title "bug: <出错脚本> <简短描述>" \
-  --script "<出错脚本>.py" \
-  --error '<stderr JSON>' \
-  --body "<复现步骤>"
-```
-
-> ⚠️ 须配置环境变量 **`GITHUB_TOKEN`**（或 `GH_TOKEN`）；**勿**在代码或 Skill 中硬编码 PAT。上报前确认 `--error` 和 `--body` 中不含 appKey、empId 等敏感信息。
+遇到 API 异常（如 `API Error (2xxxxx)`）时：**本 Skill 不再提供** `cwork-report-issue.py`。Agent 应向用户呈现 stderr 中的结构化错误摘要，并建议到 **`xgjk/cwork-skills`** 仓库开 Issue 留痕；若在完整克隆的该仓库内且已配置 `GITHUB_TOKEN`，可使用根目录 **`github-issues/fetch_issues.py`** 拉取快照辅助描述问题（**勿**在 Issue 正文粘贴 appKey、token、敏感 empId）。
 
 ### 通用参数
 
