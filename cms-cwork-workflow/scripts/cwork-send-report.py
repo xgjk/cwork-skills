@@ -29,6 +29,7 @@ from __future__ import annotations
 import sys
 import json
 import copy
+import re
 import argparse
 from pathlib import Path
 
@@ -122,6 +123,12 @@ def parse_args():
         "--params-file", dest="params_file", default=None,
         help="UTF-8 JSON 文件路径，从文件读取参数（用于 Windows 下传递中文内容）",
     )
+    p.add_argument(
+        "--allow-minimal-body",
+        dest="allow_minimal_body",
+        action="store_true",
+        help="允许正文过短（默认纯文本不足 50 字会拒绝保存草稿，防止误发占位内容）",
+    )
     return p.parse_args()
 
 
@@ -140,6 +147,42 @@ def merge_report_content_args(args) -> None:
 # ---------------------------------------------------------------------------
 # Resolve / validate names
 # ---------------------------------------------------------------------------
+
+MIN_BODY_PLAIN_LEN = 50
+
+
+def split_cli_name_list(s: str) -> list[str]:
+    """按英文逗号、中文逗号、顿号、分号拆分姓名列表（修复仅用「，」导致整串当一人）。"""
+    s = (s or "").strip()
+    if not s:
+        return []
+    parts = re.split(r"[,，、;；]", s)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def body_plain_length(content: str | None, content_type: str) -> int:
+    """与预览一致的「纯文本长度」近似：html 去标签；markdown 按原文字符数。"""
+    if content is None:
+        return 0
+    raw = content.strip()
+    if not raw:
+        return 0
+    ct = (content_type or "html").lower()
+    if ct == "markdown":
+        return len(raw)
+    plain = re.sub(r"<[^>]+>", "", raw)
+    return len(plain.strip())
+
+
+def effective_body_content_type(args, detail: dict | None) -> str:
+    if args.body_content_type is not None:
+        return args.body_content_type
+    if detail:
+        raw_ct = detail.get("contentType")
+        if isinstance(raw_ct, str) and raw_ct.lower() in ("html", "markdown"):
+            return raw_ct.lower()
+    return "html"
+
 
 def resolve_receivers(client, names: list[str]) -> dict:
     results = {}
@@ -562,8 +605,36 @@ def main():
             }, ensure_ascii=False), file=sys.stderr)
             sys.exit(1)
 
-    receiver_names = [n.strip() for n in args.receivers.split(",") if n.strip()]
-    cc_names = [n.strip() for n in args.cc_names.split(",") if n.strip()]
+    detail: dict | None = None
+    if args.draft_id:
+        try:
+            detail = client.get_draft_detail(args.draft_id)
+        except CWorkError as e:
+            print(json.dumps({
+                "success": False,
+                "step": "get_draft_detail",
+                "error": str(e),
+            }, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
+
+    if not args.allow_minimal_body:
+        ect = effective_body_content_type(args, detail)
+        plen = body_plain_length(args.content, ect)
+        if plen < MIN_BODY_PLAIN_LEN:
+            print(json.dumps({
+                "success": False,
+                "step": "validate_body",
+                "error": (
+                    f"正文过短（按 {ect} 估算约 {plen} 字，阈值 {MIN_BODY_PLAIN_LEN}）。"
+                    "请补充业务内容，或显式传入 --allow-minimal-body 跳过此校验。"
+                ),
+                "contentPlainLength": plen,
+                "contentTypeUsed": ect,
+            }, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
+
+    receiver_names = split_cli_name_list(args.receivers)
+    cc_names = split_cli_name_list(args.cc_names)
     receiver_nonempty = bool(receiver_names)
     cc_nonempty = bool(cc_names)
 
@@ -588,18 +659,6 @@ def main():
 
     accept_emp_ids = [str(e["empId"]) for e in confirmed]
     cc_emp_ids = [str(e["empId"]) for e in cc_confirmed]
-
-    detail: dict | None = None
-    if args.draft_id:
-        try:
-            detail = client.get_draft_detail(args.draft_id)
-        except CWorkError as e:
-            print(json.dumps({
-                "success": False,
-                "step": "get_draft_detail",
-                "error": str(e),
-            }, ensure_ascii=False), file=sys.stderr)
-            sys.exit(1)
 
     file_vos = upload_files(client, args.file_paths, args.file_names)
     new_uploads = bool(args.file_paths)

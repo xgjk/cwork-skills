@@ -409,6 +409,34 @@ class CWorkClient:
                 break
         return False
 
+    def batch_delete_drafts(
+        self,
+        *,
+        id_list: list[str | int] | None = None,
+        begin_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+    ) -> int:
+        """5.28 批量删除草稿。开放 API 约定 **时间范围优先**：同时传时间与 idList 时仅按时间删除。
+
+        请求体仅含文档所列字段：``beginTime`` / ``endTime`` 或 ``idList``（草稿箱记录 id，同 5.24 的 ``id``）。
+        """
+        body: dict = {}
+        if begin_time_ms is not None and end_time_ms is not None:
+            body["beginTime"] = int(begin_time_ms)
+            body["endTime"] = int(end_time_ms)
+        elif id_list:
+            body["idList"] = [int(str(x)) for x in id_list]
+        else:
+            raise ValueError(
+                "batch_delete_drafts: 请传入 begin_time_ms 与 end_time_ms，或传入 id_list"
+            )
+        data = self._post("/open-api/work-report/draftBox/batchDelete", body)
+        if isinstance(data, int):
+            return data
+        if data is None:
+            return 0
+        return int(data)
+
     # -------------------------------------------------------------------------
     # Tasks
     # -------------------------------------------------------------------------

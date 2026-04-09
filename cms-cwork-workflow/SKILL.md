@@ -5,7 +5,7 @@ skillcode: cms-cwork-workflow
 github: https://github.com/xgjk/cwork-skills
 dependencies:
   - cms-auth-skills
-version: 1.0.6
+version: 1.0.7
 tools_provided:
   - name: cwork_client
     category: exec
@@ -67,6 +67,12 @@ tools_provided:
     permission: read
     description: 查询汇报模板列表
     status: active
+  - name: cwork-draft-box
+    category: exec
+    risk_level: high
+    permission: write
+    description: 草稿箱列表（5.24）与批量删除草稿（5.28）
+    status: active
   - name: cwork-report-issue
     category: exec
     risk_level: low
@@ -79,7 +85,7 @@ tools_provided:
 
 ## 概述
 
-本 Skill 将 CWork（工作协同平台）的完整 API 能力封装为 **9 个意图级编排脚本**，每个脚本独立可执行，Agent 通过 `exec python3 scripts/<name>.py` 调用，JSON 输出到 stdout、错误到 stderr。
+本 Skill 将 CWork（工作协同平台）的完整 API 能力封装为 **多个意图级编排脚本**，每个脚本独立可执行，Agent 通过 `exec python3 scripts/<name>.py` 调用，JSON 输出到 stdout、错误到 stderr。
 
 **设计原则**：
 - **Agent-First**：脚本负责 API 编排，Agent 负责 LLM 推理和用户交互
@@ -249,8 +255,8 @@ python3 scripts/cwork-send-report.py \
 | `--content` / `-c` | 保存草稿时 ✅ | 汇报正文 |
 | `--content-html` | ❌ | [兼容] 同 `--content` |
 | `--content-type` | ❌ | 正文格式：`html` 或 `markdown`（默认与更新沿用规则见上文） |
-| `--receivers` / `-r` | ❌ | 接收人姓名；更新时若省略则沿用草稿详情中的接收人。**若本次传了姓名**且草稿已有 `reportLevelList`（且未使用 `--report-level-json`），脚本会把解析后的 empId **写回**对应节点的 `levelUserList`，与开放 API「接收人以 `reportLevelList` 为准」一致，避免仅 `summary` 显示新人而 `draftDetail` 仍为旧人 |
-| `--cc` | ❌ | 抄送；更新时若省略则沿用草稿中的抄送 |
+| `--receivers` / `-r` | ❌ | 接收人姓名；**多个姓名**可用英文逗号 `,`、中文逗号 `，`、顿号 `、` 或分号 `;`/`；` 分隔（勿整串写成一人）。更新时若省略则沿用草稿详情中的接收人。**若本次传了姓名**且草稿已有 `reportLevelList`（且未使用 `--report-level-json`），脚本会把解析后的 empId **写回**对应节点的 `levelUserList`，与开放 API「接收人以 `reportLevelList` 为准」一致，避免仅 `summary` 显示新人而 `draftDetail` 仍为旧人 |
+| `--cc` | ❌ | 抄送；分隔规则同 `--receivers` |
 | `--grade` | ❌ | 优先级：`一般`（默认）/ `紧急` |
 | `--type-id` | ❌ | 汇报类型 ID（默认 9999） |
 | `--file-paths` | ❌ | 本地附件；**未传且为更新**时沿用草稿已有附件 |
@@ -260,12 +266,13 @@ python3 scripts/cwork-send-report.py \
 | `--preview-only` | ❌ | 仅保存+预览；**即使带 `--confirm-send` 也不会发出** |
 | `--draft-id` | ❌ | **值为汇报 id**（参数名历史沿用）：更新草稿或配合 `--confirm-send` 仅执行 5.27 |
 | `--confirm-send` | ❌ | **必须**在用户确认完整 `draftDetail` 后再加，才会调用 5.27 |
+| `--allow-minimal-body` | ❌ | 跳过「正文过短」校验（默认按 html/markdown 估算纯文本不足 50 字会拒绝保存草稿，减少误发占位内容） |
 
 **流程步骤**：
 1. **Resolve** — 按姓名搜索员工；本轮回填的姓名参与合并，未填则沿用 5.25 详情中的接收人/抄送
 2. **Validate** — 姓名未找到或多匹配时报错终止
 3. **Upload** — 若传了 `--file-paths` 则上传并作为附件；否则更新时保留原附件列表
-4. **Detail（更新时）** — 若有 `--draft-id`，先 `get_draft_detail` 再与本次参数合并
+4. **Detail（更新时）** — 若有 `--draft-id`，先 `get_draft_detail` 再与本次参数合并，并用于正文长度校验（未传 `--allow-minimal-body` 时）
 5. **Draft（5.23）** — 全量 `saveOrUpdate`，返回汇报 id
 6. **Preview** — 再次 `get_draft_detail`，stdout 含完整 **`draftDetail`**（含全文**正文**）及 **`summary`**。`summary` 的 `contentPlainText` / `contentPreview` 为便于速览的纯文本预览（对 HTML 标签做了剥离；Markdown 正文通常无标签，与 `--content` 接近）；过长截断；过短有 `previewWarnings`。`confirmPrompt` 内嵌预览（≤2000 字）。**向用户确认时以完整 `draftDetail` 为准**，不要只用 `summary`。
 7. **Submit（5.27）** — 仅当 `--confirm-send` 且非 `--preview-only` 时 `submit`；**不要**再用 5.1 无 id 提交，以免产生重复汇报与孤儿草稿
@@ -621,6 +628,20 @@ python3 scripts/cwork-templates.py list --begin-time 1710000000000 --end-time 17
 
 ---
 
+### 9. 草稿箱列表与批量删除 — `cwork-draft-box.py`
+
+**意图**：分页查看草稿箱（5.24）；按草稿箱记录 id 列表或时间范围批量删除（5.28）。**`--ids` 须为 5.24 返回的 `draftBoxId`（列表项 `id`），不是汇报 id / `businessId`**；仅持有汇报 id 时请用 `cwork_client.delete_draft_by_report_id`。
+
+```bash
+python3 scripts/cwork-draft-box.py list --page-size 20
+python3 scripts/cwork-draft-box.py batch-delete --ids 2036325013120483329,2036325013120483330
+python3 scripts/cwork-draft-box.py batch-delete --begin-ms 1711785600000 --end-ms 1711872000000 --dry-run
+```
+
+开放 API 约定 **时间范围优先**：同时传时间与 `idList` 时仅执行时间范围删除。
+
+---
+
 ## `reportLevelList` 字段格式
 
 `cwork-send-report.py` 可通过 **`--report-level-json`** 指向 UTF-8 JSON 文件（根节点为数组），内容对应 API 字段 `reportLevelList`，用于指定建议人/决策人/传阅等节点；不传时新建草稿可为空，**更新**时默认从 5.25 详情中的 `reportLevelList` 原样转换后写回，避免全量更新被清空。每个节点结构如下：
@@ -687,7 +708,7 @@ Agent ← JSON（已发送催办汇报）
 - **失败**：JSON 到 stderr，含 `"success": false` 和 `"error"` 字段，exit code ≠ 0
 - **Agent 应同时检查 stdout 和 stderr**
 
-遇到 API 异常（如 `API Error (2xxxxx)`）时，可调用 `cwork-report-issue.py` 上报问题：
+遇到 API 异常（如 `API Error (2xxxxx)`）时，可调用 `cwork-report-issue.py` 上报问题（若仓库已包含该脚本）：
 
 ```bash
 python3 scripts/cwork-report-issue.py \
@@ -697,7 +718,7 @@ python3 scripts/cwork-report-issue.py \
   --body "<复现步骤>"
 ```
 
-> ⚠️ 上报前确认 `--error` 和 `--body` 中不含 appKey、empId 等敏感信息。
+> ⚠️ 须配置环境变量 **`GITHUB_TOKEN`**（或 `GH_TOKEN`）；**勿**在代码或 Skill 中硬编码 PAT。上报前确认 `--error` 和 `--body` 中不含 appKey、empId 等敏感信息。
 
 ### 通用参数
 
@@ -706,6 +727,10 @@ python3 scripts/cwork-report-issue.py \
 | 参数 | 说明 |
 |------|------|
 | `--params-file <path>` | 从 UTF-8 JSON 读参数，key 与 CLI 一致（连字符）。解决 PowerShell 中文编码问题。发送汇报时正文键用 **`content`**；旧键 **`content-html`** 仍兼容。 |
+
+**多行正文（JSON 合法性）**：字符串值内若需换行，须写转义序列 `\n`；**不要**在 JSON 引号对内直接敲物理换行，否则 `json.load` 会报 `Expecting delimiter`。
+
+**`content-type` 与展示**：脚本会把 `markdown` / `html` 按开放 API 传入 `contentType`。若产品在客户端将正文按 HTML 渲染、Markdown 仅当纯文本显示，则需在编排侧自行将 Markdown 转为 HTML 后以 `html` 提交，或向接口/产品确认是否支持 Markdown 渲染（勿在客户端臆造文档未列字段）。
 
 **用法示例**：
 
@@ -740,7 +765,8 @@ cms-cwork-workflow/
 │   ├── cwork-query-tasks.py          ← 5. 查询任务
 │   ├── cwork-nudge-report.py         ← 6. 催办闭环
 │   ├── cwork-todo.py                 ← 7. 待办管理
-│   └── cwork-templates.py            ← 8. 模板管理
+│   ├── cwork-templates.py            ← 8. 模板管理
+│   └── cwork-draft-box.py            ← 草稿箱列表 / 批量删除（5.24 / 5.28）
 ├── design/
 │   └── DESIGN.md                     ← 架构设计文档
 └── references/
