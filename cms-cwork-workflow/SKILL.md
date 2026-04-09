@@ -5,6 +5,7 @@ skillcode: cms-cwork-workflow
 github: https://github.com/xgjk/cwork-skills
 dependencies:
   - cms-auth-skills
+# bump 时须同步修改同目录下 version.json 的 version 字段
 version: 1.0.7
 tools_provided:
   - name: cwork_client

@@ -2,7 +2,7 @@
 
 ## 基本信息
 
-- 版本：见 `version.json`
+- **版本号须两处一致**：`SKILL.md` 前言（YAML 的 `version:`）与根目录 **`version.json`** 的 `version` 字段；发布或 bump 时**必须同时改这两处**，避免平台与文档不一致。
 - ClawHub slug：`cms-cwork-workflow`
 
 ## GitHub 地址
@@ -22,7 +22,7 @@
 
 **工厂内部开发：**
 1. 修改 Skill 内容
-2. 更新 `_meta.json` 版本号
+2. 若变更版本：同时更新 **`SKILL.md` 的 `version:`** 与 **`version.json`**
 3. 执行 `clawhub publish`
 
 **ClawHub 用户：**

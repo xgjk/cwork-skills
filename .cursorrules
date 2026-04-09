@@ -1,6 +1,6 @@
 # cwork-skills 仓库 — Agent 协作约束
 
-本文件为项目根规则，与 `.cursor/rules/` 下规则一并生效。修改 `cms-cwork-workflow`（尤其 `scripts/`、`cwork_client.py`、`SKILL.md`）前通读全文。
+本文件为项目根规则，与 `.cursor/rules/` 下规则一并生效。修改 `cms-cwork-workflow`（尤其 `scripts/`、`cwork_client.py`、`SKILL.md`）前通读全文。**若 bump Skill 版本**，须**同时**更新 `cms-cwork-workflow/SKILL.md` 前言中的 `version:` 与 `cms-cwork-workflow/version.json` 中的 `version`（见 `references/maintenance.md`）。
 
 ---
 
