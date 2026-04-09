@@ -8,13 +8,16 @@ cwork-send-report.py
 
 Usage:
   # 1) 仅存草稿 + 输出完整预览（默认，不发送）
-  python3 scripts/cwork-send-report.py --title "..." --content-html "<p>...</p>" --receivers "张三"
+  python3 scripts/cwork-send-report.py --title "..." --content "<p>...</p>" --receivers "张三"
+
+  # Markdown 正文（须指定 --content-type markdown）
+  python3 scripts/cwork-send-report.py --title "..." --content-type markdown --content "## 标题\n正文" --receivers "张三"
 
   # 2) 用户确认后，仅凭汇报 id 发出（5.27）
   python3 scripts/cwork-send-report.py --draft-id <汇报id> --confirm-send
 
   # 3) 一步：保存并发出（需显式确认）
-  python3 scripts/cwork-send-report.py --title "..." --content-html "..." --receivers "张三" --confirm-send
+  python3 scripts/cwork-send-report.py --title "..." --content "..." --receivers "张三" --confirm-send
 
 Environment:
   CWORK_APP_KEY  (required)
@@ -45,7 +48,31 @@ from cwork_client import (
 def parse_args():
     p = argparse.ArgumentParser(description="Send a CWork report (draft-first, 5.27 to publish)")
     p.add_argument("--title", "-t", default=None, help="汇报标题（发送-only 模式可不填）")
-    p.add_argument("--content-html", "-c", default=None, help="正文 HTML（发送-only 模式可不填）")
+    p.add_argument(
+        "--content",
+        "-c",
+        default=None,
+        help=(
+            "汇报正文（与 Skill / params 键 content 一致）。"
+            "格式由 --content-type 指定（html / markdown）；发送-only 可不填。"
+        ),
+    )
+    p.add_argument(
+        "--content-html",
+        dest="content_html",
+        default=None,
+        help="[兼容] 与 --content 相同，勿与 --content 同时指定",
+    )
+    p.add_argument(
+        "--content-type",
+        dest="body_content_type",
+        choices=["html", "markdown"],
+        default=None,
+        help=(
+            "正文格式 html 或 markdown。新建未指定时默认 html；"
+            "带 --draft-id 更新且未指定时沿用当前草稿详情中的格式。"
+        ),
+    )
     p.add_argument(
         "--receivers", "-r", default="",
         help="Comma-separated receiver names (will be resolved to empId)",
@@ -96,6 +123,18 @@ def parse_args():
         help="UTF-8 JSON 文件路径，从文件读取参数（用于 Windows 下传递中文内容）",
     )
     return p.parse_args()
+
+
+def merge_report_content_args(args) -> None:
+    """--content 与 --content-html 二选一，合并到 args.content。"""
+    if args.content is not None and args.content_html is not None:
+        print(json.dumps({
+            "success": False,
+            "error": "请勿同时指定 --content 与 --content-html",
+        }, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
+    if args.content is None:
+        args.content = args.content_html
 
 
 # ---------------------------------------------------------------------------
@@ -340,8 +379,14 @@ def build_save_draft_kwargs(
         template_id = str(template_raw) if template_raw is not None else None
         plan_raw = args.plan_id if args.plan_id is not None else detail.get("planId")
         plan_id = str(plan_raw) if plan_raw is not None else None
-        # CLI 约定正文为 HTML，与 --content-html 一致，避免沿用详情里 markdown 与 HTML 混用
-        content_type = "html"
+        if args.body_content_type is not None:
+            content_type = args.body_content_type
+        else:
+            raw_ct = detail.get("contentType")
+            if isinstance(raw_ct, str) and raw_ct.lower() in ("html", "markdown"):
+                content_type = raw_ct.lower()
+            else:
+                content_type = "html"
     else:
         final_accept = accept_emp_ids
         final_cc = cc_emp_ids
@@ -349,7 +394,7 @@ def build_save_draft_kwargs(
         privacy_level = "非涉密"
         template_id = None
         plan_id = str(args.plan_id) if args.plan_id is not None else None
-        content_type = "html"
+        content_type = args.body_content_type if args.body_content_type is not None else "html"
 
     # 5.1/5.23：接收人以 reportLevelList 为准；acceptEmpIdList 仅在 reportLevelList 为空时兜底。
     # 更新草稿且用户显式传 --receivers 时，必须把新人写入 reportLevelList，否则详情仍显示旧 empList。
@@ -365,7 +410,7 @@ def build_save_draft_kwargs(
 
     return {
         "main": args.title,
-        "content_html": args.content_html,
+        "content_html": args.content,
         "content_type": content_type,
         "type_id": args.type_id,
         "grade": args.grade,
@@ -410,14 +455,15 @@ def build_preview_shell(args, confirmed: list[dict], cc_confirmed: list[dict],
     else:
         content_preview = plain[:preview_cap] + "…"
 
-    # confirmPrompt 内嵌正文：用纯文本预览，避免重复塞入整段 HTML；短正文全文展示便于审核
+    # confirmPrompt 内嵌正文：预览用纯文本，避免重复塞入整段 HTML/Markdown
     prompt_body_cap = 2000
     prompt_plain = plain if len(plain) <= prompt_body_cap else plain[:prompt_body_cap] + "…"
 
     preview_warnings: list[str] = []
     if plain_len < 50:
         preview_warnings.append(
-            f"正文去标签后仅 {plain_len} 个字符，可能为过短或占位内容，发送前请与用户确认"
+            f"summary 中的正文预览仅 {plain_len} 个字符（由草稿正文简化得到，"
+            "一般应与本次 --content 长度接近），可能过短，发送前请与用户确认"
         )
 
     accept_names = [e["name"] for e in confirmed]
@@ -445,7 +491,7 @@ def build_preview_shell(args, confirmed: list[dict], cc_confirmed: list[dict],
         + "【请用户确认以下完整草稿后再发送】\n"
         f"标题：{from_api_detail.get('main')}\n"
         f"优先级：{from_api_detail.get('grade')}\n"
-        "正文（纯文本预览；完整富文本见 draftDetail.contentHtml）：\n"
+        "正文（以下为预览；定稿请以 draftDetail 为准，其中正文与本次 --content 对应）：\n"
         f"{prompt_plain}\n"
         f"接收人（解析结果）：{', '.join(accept_names) or '（沿用草稿详情）'}\n"
         f"抄送：{', '.join(cc_names) or '（沿用草稿详情）'}\n"
@@ -457,8 +503,8 @@ def build_preview_shell(args, confirmed: list[dict], cc_confirmed: list[dict],
     return {
         "reportId": from_api_detail.get("id"),
         "note": (
-            "以下为接口 5.25 返回的完整草稿数据（draftDetail），请向用户展示全文后再发送。"
-            "确认无误后使用 --draft-id <汇报id> --confirm-send。"
+            "以下为完整草稿 draftDetail（含接口原始字段）。请向用户展示全文："
+            "正文即本次 --content 保存后的结果；确认后再执行 --draft-id <汇报id> --confirm-send。"
         ),
         "draftDetail": from_api_detail,
         "summary": summary,
@@ -477,21 +523,22 @@ def main():
         pass
     apply_params_file_pre_parse()
     args = parse_args()
+    merge_report_content_args(args)
 
     send_only = bool(args.confirm_send and args.draft_id and not args.preview_only)
 
     if send_only:
-        if args.title is not None or args.content_html is not None:
+        if args.title is not None or args.content is not None:
             print(json.dumps({
                 "success": False,
-                "error": "发送-only 模式请勿再传 --title/--content-html；仅需 --draft-id 与 --confirm-send",
+                "error": "发送-only 模式请勿再传 --title/--content；仅需 --draft-id 与 --confirm-send",
             }, ensure_ascii=False), file=sys.stderr)
             sys.exit(1)
     else:
-        if not args.title or args.content_html is None:
+        if not args.title or args.content is None:
             print(json.dumps({
                 "success": False,
-                "error": "保存草稿需要 --title 与 --content-html（或使用 --draft-id + --confirm-send 仅发出）",
+                "error": "保存草稿需要 --title 与 --content（或仅 --draft-id + --confirm-send）；可用 --content-html 代替 --content",
             }, ensure_ascii=False), file=sys.stderr)
             sys.exit(1)
 
@@ -597,7 +644,7 @@ def main():
 
     if not args.confirm_send or args.preview_only:
         preview["nextStep"] = (
-            "已向用户展示完整草稿（draftDetail）并确认无误后，再执行："
+            "用户已确认 draftDetail 全文（正文、附件、流程节点等）后，再执行："
             f"--draft-id {saved_report_id} --confirm-send"
         )
         if args.preview_only and args.confirm_send:

@@ -35,7 +35,10 @@ def parse_args(argv=None):
                         choices=["reply", "mark-read", "pending"],
                         help="操作模式")
     parser.add_argument("--report-id", help="汇报ID（reply/mark-read模式必填）")
-    parser.add_argument("--reply", help="回复内容（reply模式必填）")
+    parser.add_argument(
+        "--reply",
+        help="回复正文（reply 必填；提交至 API 的 contentHtml，格式由 --content-type 决定）",
+    )
     parser.add_argument(
         "--content-type",
         choices=["html", "markdown"],

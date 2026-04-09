@@ -97,12 +97,12 @@ python3 scripts/cwork-search-emp.py --name "张三"
 
 2. 预览草稿（--preview-only 仅保存草稿，不发送）
 python3 scripts/cwork-send-report.py \
-  --title "周报" --content-html "<p>内容</p>" \
+  --title "周报" --content "<p>内容</p>" \
   --receivers "张三" --preview-only
 
 3. 确认发送
 python3 scripts/cwork-send-report.py \
-  --title "周报" --content-html "<p>内容</p>" \
+  --title "周报" --content "<p>内容</p>" \
   --receivers "张三"
 ```
 
@@ -214,7 +214,7 @@ python3 scripts/cwork-search-emp.py --name "张" --output-raw
 # 第一步：保存草稿并输出完整预览（默认不会发出）
 python3 scripts/cwork-send-report.py \
   --title "周报标题" \
-  --content-html "<p>汇报内容</p>" \
+  --content "<p>汇报内容</p>" \
   --receivers "张三,李四" \
   --grade "一般"
 
@@ -224,15 +224,31 @@ python3 scripts/cwork-send-report.py --draft-id "<汇报id>" --confirm-send
 # 一步保存并发出（仍须显式 --confirm-send，表示已确认预览）
 python3 scripts/cwork-send-report.py \
   --title "周报标题" \
-  --content-html "<p>汇报内容</p>" \
+  --content "<p>汇报内容</p>" \
   --receivers "张三" \
   --confirm-send
+
+# Markdown 正文（须 --content-type markdown）
+python3 scripts/cwork-send-report.py \
+  --title "周报标题" \
+  --content-type markdown \
+  --content "## 小节\n正文" \
+  --receivers "张三"
 ```
+
+**正文（编排侧只认 `content`）**
+
+- 汇报正文：CLI 用 **`--content`** / **`-c`**，`--params-file` 用键 **`content`**。脚本负责与接口字段对齐，**Agent 只需按 `content` 理解正文**。
+- Markdown：须同时指定 **`--content-type markdown`**。
+- 新建未传 `--content-type` 时脚本默认 `html`；带 `--draft-id` 更新且未传时沿用草稿详情中的正文类型。
+- **`--content-html`** 可选，与 **`--content` 二选一**（兼容旧自动化，勿同时使用）。
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `--title` / `-t` | 保存草稿时 ✅ | 汇报标题（与 `--draft-id --confirm-send` 单独发出时勿传） |
-| `--content-html` / `-c` | 保存草稿时 ✅ | 正文 HTML（同上） |
+| `--content` / `-c` | 保存草稿时 ✅ | 汇报正文 |
+| `--content-html` | ❌ | [兼容] 同 `--content` |
+| `--content-type` | ❌ | 正文格式：`html` 或 `markdown`（默认与更新沿用规则见上文） |
 | `--receivers` / `-r` | ❌ | 接收人姓名；更新时若省略则沿用草稿详情中的接收人。**若本次传了姓名**且草稿已有 `reportLevelList`（且未使用 `--report-level-json`），脚本会把解析后的 empId **写回**对应节点的 `levelUserList`，与开放 API「接收人以 `reportLevelList` 为准」一致，避免仅 `summary` 显示新人而 `draftDetail` 仍为旧人 |
 | `--cc` | ❌ | 抄送；更新时若省略则沿用草稿中的抄送 |
 | `--grade` | ❌ | 优先级：`一般`（默认）/ `紧急` |
@@ -251,7 +267,7 @@ python3 scripts/cwork-send-report.py \
 3. **Upload** — 若传了 `--file-paths` 则上传并作为附件；否则更新时保留原附件列表
 4. **Detail（更新时）** — 若有 `--draft-id`，先 `get_draft_detail` 再与本次参数合并
 5. **Draft（5.23）** — 全量 `saveOrUpdate`，返回汇报 id
-6. **Preview** — 再次 `get_draft_detail`，stdout 含完整 `draftDetail`（含全文 `contentHtml`）。`summary` 含 `contentPlainText`（全文去标签）、`contentPreview`（极长纯文本时最多约 4000 字截断）、`contentPlainLength`；去标签后不足 50 字时有 `previewWarnings`。`confirmPrompt` 以纯文本展示正文（≤2000 字全文，更长截断），完整 HTML 始终以 `draftDetail.contentHtml` 为准
+6. **Preview** — 再次 `get_draft_detail`，stdout 含完整 **`draftDetail`**（含全文**正文**）及 **`summary`**。`summary` 的 `contentPlainText` / `contentPreview` 为便于速览的纯文本预览（对 HTML 标签做了剥离；Markdown 正文通常无标签，与 `--content` 接近）；过长截断；过短有 `previewWarnings`。`confirmPrompt` 内嵌预览（≤2000 字）。**向用户确认时以完整 `draftDetail` 为准**，不要只用 `summary`。
 7. **Submit（5.27）** — 仅当 `--confirm-send` 且非 `--preview-only` 时 `submit`；**不要**再用 5.1 无 id 提交，以免产生重复汇报与孤儿草稿
 
 ---
@@ -300,6 +316,8 @@ python3 scripts/cwork-query-report.py --mode keyword-search \
 | `--report-type` | 汇报类型：1-工作交流 / 2-工作指引 / 3-文件签批 / 4-AI汇报 / 5-工作汇报 |
 | `--status` | 已读状态：0=未读 / 1=已读 |
 | `--start-date` / `--end-date` | 时间范围（YYYY-MM-DD） |
+
+**收件箱 / 发件箱列表 vs 详情**：`inbox` / `outbox` / `pending` / `unread` / `my-sent`（与 `outbox` 同脚本路径）等模式返回的 **`data` 为接口原始分页结构**（常见含 `list`、`total`）。列表项里的「正文」类字段多为**摘要**，与 `send-report` 的 `--content` 全文不一定一致；需要全文或完整字段时请用 **`--mode detail --report-id`**（或 `node-detail`）拉详情。
 
 **输出格式**（sender-history）：
 ```json
@@ -430,8 +448,8 @@ python3 scripts/cwork-review-report.py --mode pending --page-size 20
 |------|------|
 | `--mode` | `reply` / `mark-read` / `pending` |
 | `--report-id` | 汇报记录 ID（reply / mark-read 必填） |
-| `--reply` | 回复正文（reply 必填；默认按 markdown 原样提交，支持内部链接语法） |
-| `--content-type` | `markdown`（默认）或 `html`；`html` 时将正文包成 `<p>…</p>` |
+| `--reply` | 回复正文（reply 必填；格式由 `--content-type` 决定） |
+| `--content-type` | `markdown`（默认）或 `html`（`html` 时包成 `<p>…</p>`） |
 | `--at` | 回复中 @的人姓名（自动解析 empId） |
 | `--page-index` | 页码（pending 模式，默认 1） |
 | `--page-size` | 每页大小（pending 模式，默认 20） |
@@ -639,9 +657,9 @@ Agent ← JSON → 摘要呈现给用户
 ```
 用户：「给张三发一份周报，内容是XXX」
 Agent → exec: python3 scripts/cwork-send-report.py \
-          --title "周报" --content-html "..." --receivers "张三"
+          --title "周报" --content "..." --receivers "张三"
 Agent ← JSON（含完整 draftDetail、confirmPrompt；默认不会发出）
-Agent → 向用户展示 **draftDetail 全文**（尤其 contentHtml、附件、reportLevelList）
+Agent → 向用户展示 **draftDetail 全文**（含正文、附件、`reportLevelList`）
 用户：「确认」
 Agent → exec: python3 scripts/cwork-send-report.py \
           --draft-id "<上一步的 reportId（与 draftId 同值）>" --confirm-send
@@ -652,15 +670,12 @@ Agent → 告知发送成功
 ### 模式 C：催办闭环（3步分离）
 
 ```
-Agent → exec: python3 scripts/cwork-nudge-report.py identify --days-threshold 7
+Agent → exec: python3 scripts/cwork-nudge-report.py --mode list --days-threshold 7
 Agent ← JSON（未闭环列表）
 Agent → （LLM 推理）筛选需要催办的事项
-Agent → exec: python3 scripts/cwork-nudge-report.py reminder \
-          --item-id <id> --recipient "张三" --days-unresolved 14 --style polite
-Agent ← JSON（催办文案）
-Agent → （可选 LLM 优化文案）
-Agent → exec: python3 scripts/cwork-nudge-report.py nudge \
-          --report-id <id> --content-html "..."
+Agent → exec: python3 scripts/cwork-nudge-report.py --mode nudge \
+          --emp-id <empId> --task-main "任务名" --deadline YYYY-MM-DD --content "催办说明"
+Agent ← JSON（已发送催办汇报）
 ```
 
 ---
@@ -690,14 +705,14 @@ python3 scripts/cwork-report-issue.py \
 
 | 参数 | 说明 |
 |------|------|
-| `--params-file <path>` | 从 UTF-8 JSON 文件读取参数，key 与命令行参数名一致（连字符格式）。用于解决 Windows PowerShell 中文编码问题。 |
+| `--params-file <path>` | 从 UTF-8 JSON 读参数，key 与 CLI 一致（连字符）。解决 PowerShell 中文编码问题。发送汇报时正文键用 **`content`**；旧键 **`content-html`** 仍兼容。 |
 
 **用法示例**：
 
 ```json
 {
   "title": "周报标题",
-  "content-html": "<p>汇报内容</p>",
+  "content": "<p>汇报内容</p>",
   "receivers": "张三"
 }
 ```

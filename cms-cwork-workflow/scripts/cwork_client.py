@@ -266,7 +266,11 @@ class CWorkClient:
         report_level_list: list[dict] | None = None,
         file_vo_list: list[dict] | None = None,
     ) -> dict:
-        """Submit a report. Pass report_id to promote an existing draft."""
+        """Submit a report. Pass report_id to promote an existing draft.
+
+        正文写入 JSON 键 ``contentHtml``（历史命名）；语义由 ``contentType`` 决定，
+        ``markdown`` 时传 Markdown 源码即可。
+        """
         payload = {
             "appKey": self.app_key,
             "main": main,
@@ -295,7 +299,7 @@ class CWorkClient:
         add_emp_id_list: list[str] | None = None,
         send_msg: bool = True,
     ) -> int:
-        """Returns reply ID"""
+        """回复汇报。正文写入 ``contentHtml``；``content_type=markdown`` 时为 Markdown。"""
         return self._post("/open-api/work-report/report/record/reply", {
             "appKey": self.app_key,
             "reportRecordId": report_record_id,
@@ -327,6 +331,7 @@ class CWorkClient:
         report_level_list: list[dict] | None = None,
         file_vo_list: list[dict] | None = None,
     ) -> dict:
+        """5.23 草稿 saveOrUpdate。正文写入 ``contentHtml``；``content_type=markdown`` 时传 Markdown 字符串。"""
         effective_draft_id = draft_id if draft_id is not None else id
         if draft_id is not None and id is not None and str(draft_id) != str(id):
             raise ValueError("save_draft: pass only one of draft_id and id")
@@ -776,6 +781,8 @@ def apply_params_file_pre_parse() -> None:
           "content": "本周工作进展",
           "receivers": "张三,李四"
         }
+
+    cwork-send-report：JSON 键 ``content`` 表示正文（映射 API ``contentHtml``）；旧键 ``content-html`` 同 ``--content-html``。
 
     CLI args always take precedence over file values.
     """
