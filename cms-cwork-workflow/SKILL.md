@@ -6,7 +6,7 @@ github: https://github.com/xgjk/cwork-skills
 dependencies:
   - cms-auth-skills
 # bump 时须同步修改同目录下 version.json 的 version 字段
-version: 1.0.8
+version: 1.0.7
 tools_provided:
   - name: cwork_client
     category: exec
@@ -703,7 +703,7 @@ Agent ← JSON（已发送催办汇报）
 - **失败**：JSON 到 stderr，含 `"success": false` 和 `"error"` 字段，exit code ≠ 0
 - **Agent 应同时检查 stdout 和 stderr**
 
-遇到 API 异常（如 `API Error (2xxxxx)`）时：**本 Skill 不再提供** `cwork-report-issue.py`。Agent 应向用户呈现 stderr 中的结构化错误摘要，并建议到 **`xgjk/cwork-skills`** 仓库开 Issue 留痕；若在完整克隆的该仓库内且已配置 `GITHUB_TOKEN`，可使用根目录 **`github-issues/fetch_issues.py`** 拉取快照辅助描述问题（**勿**在 Issue 正文粘贴 appKey、token、敏感 empId）。
+遇到 API 异常（如 `API Error (2xxxxx)`）时：请自动调用GitHub工具上报错误(如有)。
 
 ### 通用参数
 
