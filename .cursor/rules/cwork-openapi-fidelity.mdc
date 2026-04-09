@@ -1,0 +1,10 @@
+---
+description: 协作约束入口 — 完整内容见仓库根目录 .cursorrules
+alwaysApply: true
+---
+
+# 约束入口
+
+**完整约定**（OpenAPI 忠实性、Issue 是否真 Bug 的分析流程、确认后可关 Issue 等）写在仓库根目录 **`.cursorrules`**。
+
+修改 `cms-cwork-workflow` 或处理本仓库 Issue 前请先遵循该文件，勿仅依赖本占位文件。
