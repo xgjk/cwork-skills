@@ -189,7 +189,10 @@ class CWorkClient:
         return self._post("/open-api/work-report/report/record/outbox", params)
 
     def get_report_info(self, report_id: str) -> dict:
-        """ReportDetail"""
+        """5.5 获取汇报内容。开放 API 响应体为 **6.6 ReportDTO**：含 ``reportId``、``content``（正文纯文本）、``writeEmpId``、``writeEmpName``、``createTime``、``replies``。
+
+        **不含** ``main``（标题）、``acceptEmpIdList`` 等；查标题与流程节点/接收人请用 ``get_report_node_detail``（5.33）。
+        """
         return self._get("/open-api/work-report/report/info", {"reportId": report_id})
 
     def get_report_node_detail(self, report_id: str | int) -> dict:
