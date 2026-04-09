@@ -2,10 +2,10 @@
 name: cms-cwork-workflow
 description: 管理工作协同中的员工查询、汇报处理、待办闭环和任务协作流程。触发词：cwork/CWork/工作协同/发送汇报/发汇报/汇报/申请/周报/待办/任务/催办/搜索员工/查收件箱。
 skillcode: cms-cwork-workflow
-github: https://github.com/xgjk/cwork-skills/tree/main/cwork-skills/cms-cwork-workflow
+github: https://github.com/xgjk/cwork-skills
 dependencies:
   - cms-auth-skills
-version: 1.0.5
+version: 1.0.6
 tools_provided:
   - name: cwork_client
     category: exec
@@ -600,58 +600,6 @@ python3 scripts/cwork-templates.py list --begin-time 1710000000000 --end-time 17
 - `type` — 类型 ID
 - `typeName` — 类型名称
 - `grade` — 优先级
-
----
-
-## 辅助工具
-
-### 问题自动上报 — `cwork-report-issue.py`
-
-**意图**：当脚本报错或 API 异常时，自动将问题提交为 GitHub Issue，便于追踪和修复。
-
-**前置条件**：设置环境变量 `GITHUB_TOKEN`（详见 `references/maintenance.md`）。
-
-```bash
-# 上报一个脚本报错
-python3 scripts/cwork-report-issue.py \
-  --title "bug: cwork-send-report.py 发送失败" \
-  --script cwork-send-report.py \
-  --error '{"success": false, "error": "API Error (200003): 流程节点类型不正确"}' \
-  --body "发送汇报时传入 reportLevelList，type 字段使用了中文导致报错"
-
-# 先预览，不实际提交
-python3 scripts/cwork-report-issue.py \
-  --title "bug: ..." \
-  --script cwork-query-report.py \
-  --error "..." \
-  --dry-run
-```
-
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `--title` / `-T` | ✅ | Issue 标题 |
-| `--script` / `-s` | ❌ | 出错的脚本名称 |
-| `--error` / `-e` | ❌ | 错误信息（脚本 stderr 的 JSON 输出） |
-| `--body` / `-b` | ❌ | 问题描述（复现步骤等） |
-| `--extra` | ❌ | 附加信息（环境、版本等） |
-| `--labels` | ❌ | 额外标签（逗号分隔，默认已含 `bug` 和 `cms-cwork-workflow`） |
-| `--dry-run` | ❌ | 预览将提交的内容，不实际创建 |
-| `--token` | ❌ | GitHub Token（仅调试用，生产环境请用环境变量 `GITHUB_TOKEN`） |
-
-**输出格式**：
-```json
-{
-  "success": true,
-  "issue_number": 42,
-  "issue_url": "https://github.com/xgjk/cwork-skills/issues/42",
-  "title": "bug: cwork-send-report.py 发送失败"
-}
-```
-
-**Agent 调用建议**：
-- 脚本返回 `"success": false` 且错误类型为 API 异常（非参数错误）时，询问用户是否上报
-- 上报前使用 `--dry-run` 预览内容，确认无敏感信息（如 appKey、empId 等）后再提交
-- `--error` 传入脚本 stderr 的原始 JSON 输出即可，脚本会自动格式化
 
 ---
 
