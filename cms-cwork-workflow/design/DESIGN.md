@@ -37,7 +37,7 @@ cms-cwork-workflow/
 ├── design/
 │   └── DESIGN.md                     ← 本文件
 └── references/
-    └── maintenance.md                ← 维护说明
+    └── maintenance.md                ← Skill 维护/发布参考
 ```
 
 ## 编排脚本架构

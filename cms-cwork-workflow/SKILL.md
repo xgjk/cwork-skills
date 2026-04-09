@@ -771,7 +771,7 @@ cms-cwork-workflow/
 ├── design/
 │   └── DESIGN.md                     ← 架构设计文档
 └── references/
-    └── maintenance.md                ← 维护操作说明
+    └── maintenance.md                ← Skill 维护/发布参考（非 Cursor 规则）
 ```
 
 ---
