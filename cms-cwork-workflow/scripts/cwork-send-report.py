@@ -129,6 +129,15 @@ def parse_args():
         action="store_true",
         help="允许正文过短（默认纯文本长度 ≤10 会拒绝保存草稿；超过 10 字不拦截）",
     )
+    p.add_argument(
+        "--fail-on-literal-newlines",
+        dest="fail_on_literal_newlines",
+        action="store_true",
+        help=(
+            "在自动修正前检测：正文若含字面量 \\\\n / \\\\r\\\\n 则直接失败退出（供 CI/自动化）。"
+            "终端用户无需使用此参数。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -183,6 +192,25 @@ def effective_body_content_type(args, detail: dict | None) -> str:
         if isinstance(raw_ct, str) and raw_ct.lower() in ("html", "markdown"):
             return raw_ct.lower()
     return "html"
+
+
+def _body_has_literal_escaped_newlines(content: str | None) -> bool:
+    """检测正文是否含 JSON/Agent 常见的「字面量 \\n」序列（反斜杠 + n），而非真实换行。"""
+    text = content or ""
+    return ("\\n" in text) or ("\\r\\n" in text) or ("\\r" in text)
+
+
+def normalize_literal_escaped_newlines(content: str | None) -> str:
+    """将字面量 \\n / \\r\\n / \\r 转为真实换行（静默；不区分 html/markdown）。
+
+    典型来源：params 被二次转义、或非 json.dump 手写 JSON。对真实换行无影响。
+    """
+    if not content:
+        return content or ""
+    if "\\" not in content:
+        return content
+    s = content.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
+    return s
 
 
 def resolve_receivers(client, names: list[str]) -> dict:
@@ -618,19 +646,29 @@ def main():
             }, ensure_ascii=False), file=sys.stderr)
             sys.exit(1)
 
+    effective_ct = effective_body_content_type(args, detail)
+    if args.fail_on_literal_newlines and _body_has_literal_escaped_newlines(args.content):
+        print(json.dumps({
+            "success": False,
+            "step": "validate_content_newline",
+            "error": "正文含字面量换行转义序列；已按 --fail-on-literal-newlines 拒绝保存。",
+            "contentTypeUsed": effective_ct,
+        }, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
+    args.content = normalize_literal_escaped_newlines(args.content)
+
     if not args.allow_minimal_body:
-        ect = effective_body_content_type(args, detail)
-        plen = body_plain_length(args.content, ect)
+        plen = body_plain_length(args.content, effective_ct)
         if plen <= SHORT_BODY_REJECT_IF_LEN_LE:
             print(json.dumps({
                 "success": False,
                 "step": "validate_body",
                 "error": (
-                    f"正文过短（按 {ect} 估算约 {plen} 字；须超过 {SHORT_BODY_REJECT_IF_LEN_LE} 字才保存。"
+                    f"正文过短（按 {effective_ct} 估算约 {plen} 字；须超过 {SHORT_BODY_REJECT_IF_LEN_LE} 字才保存。"
                     "请补充内容，或显式传入 --allow-minimal-body 跳过此校验。"
                 ),
                 "contentPlainLength": plen,
-                "contentTypeUsed": ect,
+                "contentTypeUsed": effective_ct,
                 "rejectIfPlainLengthLte": SHORT_BODY_REJECT_IF_LEN_LE,
             }, ensure_ascii=False), file=sys.stderr)
             sys.exit(1)
