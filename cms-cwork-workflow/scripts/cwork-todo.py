@@ -47,7 +47,7 @@ def list_todos(args):
                 "reportId": item.get("reportId"),
                 "id": item.get("todoId"),
                 "title": item.get("main") or item.get("title"),
-                "type": item.get("todoType") or item.get("type"),
+                "todoType": item.get("todoType") or item.get("type"),
                 "status": item.get("status"),
                 "createTime": item.get("createTime"),
                 "creator": item.get("writeEmpName") or item.get("creatorName"),

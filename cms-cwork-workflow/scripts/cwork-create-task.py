@@ -29,6 +29,7 @@ def parse_args(argv=None):
     p.add_argument("--copy", help="CC names (comma-separated)")
     p.add_argument("--observer", help="Observer names (comma-separated)")
     p.add_argument("--report-to", help="Report-to name")
+    p.add_argument("--virtual-emp-id", help="虚拟员工 ID（可选）")
     p.add_argument("--push-now", type=lambda x: x.lower() == "true", default=True)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--params-file", dest="params_file", default=None,
@@ -39,7 +40,10 @@ def parse_args(argv=None):
 def _comma(val):
     if not val:
         return None
-    return [v.strip() for v in val.split(",") if v.strip()]
+    import re
+    # 按英文逗号、中文逗号、顿号、分号拆分姓名列表
+    parts = re.split(r"[,，、;；]", val)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _die(msg):
@@ -91,6 +95,7 @@ def main():
             supervisor_emp_id_list=_resolve(args.supervisor), copy_emp_id_list=_resolve(args.copy),
             observer_emp_id_list=_resolve(args.observer), report_emp_id_list=_resolve(report_to),
             push_now=args.push_now,
+            virtual_emp_id=args.virtual_emp_id,
         )
         print(json.dumps({"success": True, "planId": pid,
             "task": dict(main=args.task_main, deadline=args.deadline, deadlineMs=dl),

@@ -21,6 +21,7 @@ import sys
 import os
 import json
 import argparse
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -46,6 +47,19 @@ def parse_args(argv=None):
         help="回复内容类型：markdown 支持 [@标题](reportId=…&linkType=report) 等内部链接（默认）；html 时包裹为 <p>…</p>",
     )
     parser.add_argument("--at", help="被@人的姓名（reply模式可选）")
+    parser.add_argument(
+        "--file-paths",
+        nargs="*",
+        default=[],
+        help="本地附件路径（reply模式可选；会先上传后带入 mediaVOList）",
+    )
+    parser.add_argument(
+        "--file-names",
+        nargs="*",
+        default=[],
+        help="附件显示名称（与 --file-paths 顺序一致；可选）",
+    )
+    parser.add_argument("--virtual-emp-id", help="虚拟员工 ID（reply 模式可选）")
     parser.add_argument("--page-index", type=int, default=1, help="页码（默认1）")
     parser.add_argument("--page-size", type=int, default=20, help="每页大小（默认20）")
     parser.add_argument("--report-type", type=int, choices=[1, 2, 3, 4, 5],
@@ -55,6 +69,30 @@ def parse_args(argv=None):
     parser.add_argument("--params-file", dest="params_file", default=None,
                         help="UTF-8 JSON 文件路径，从文件读取参数")
     return parser.parse_args(argv)
+
+
+def upload_files_for_reply(client: CWorkClient, file_paths: list[str], file_names: list[str]) -> list[dict]:
+    if not file_paths:
+        return []
+    media_vos: list[dict] = []
+    for i, path in enumerate(file_paths):
+        display_name = file_names[i] if i < len(file_names) else Path(path).name
+        file_size = None
+        try:
+            file_size = Path(path).stat().st_size
+        except OSError:
+            file_size = None
+        result = client.upload_file(path)
+        file_id = result.get("fileId", "")
+        item = {
+            "fileId": str(file_id) if file_id is not None else "",
+            "name": display_name,
+            "type": "file",
+        }
+        if file_size is not None:
+            item["fsize"] = int(file_size)
+        media_vos.append(item)
+    return media_vos
 
 
 def main():
@@ -68,6 +106,8 @@ def main():
             "reply": args.reply,
             "contentType": args.content_type,
             "at": args.at,
+            "filePaths": args.file_paths,
+            "fileNames": args.file_names,
         }
         print("=== DRY RUN PREVIEW ===", file=sys.stderr)
         print(json.dumps(preview, ensure_ascii=False, indent=2), file=sys.stderr)
@@ -102,14 +142,22 @@ def main():
             else:
                 content_body = args.reply
 
+            media_vos = upload_files_for_reply(client, args.file_paths, args.file_names)
             reply_id = client.reply_report(
                 report_record_id=args.report_id,
                 content_html=content_body,
                 content_type=args.content_type,
                 add_emp_id_list=at_emp_ids,
                 send_msg=True,
+                media_vo_list=media_vos,
+                virtual_emp_id=args.virtual_emp_id,
             )
-            output_json({"success": True, "replyId": reply_id, "message": "Reply submitted successfully"})
+            output_json({
+                "success": True,
+                "replyId": reply_id,
+                "attachmentsCount": len(media_vos),
+                "message": "Reply submitted successfully",
+            })
 
         elif args.mode == "mark-read":
             if not args.report_id:

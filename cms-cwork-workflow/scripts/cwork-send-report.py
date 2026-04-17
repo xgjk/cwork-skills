@@ -19,9 +19,8 @@ Usage:
   # 3) 一步：保存并发出（需显式确认）
   python3 scripts/cwork-send-report.py --title "..." --content "..." --receivers "张三" --confirm-send
 
-Environment:
-  CWORK_APP_KEY  (required)
-  CWORK_BASE_URL (optional)
+Auth:
+  --app-key (required, injected by cms-auth-skills)
 """
 
 from __future__ import annotations
@@ -104,6 +103,18 @@ def parse_args():
         help="Linked plan/task ID",
     )
     p.add_argument(
+        "--business-unit-id",
+        dest="business_unit_id",
+        default=None,
+        help="业务单元 ID。传入后发汇报按业务单元预设节点流转",
+    )
+    p.add_argument(
+        "--virtual-emp-id",
+        dest="virtual_emp_id",
+        default=None,
+        help="虚拟员工 ID。传入后由虚拟人代发",
+    )
+    p.add_argument(
         "--preview-only", dest="preview_only", action="store_true",
         help="仅保存草稿并输出完整预览（与默认不发送行为一致，便于显式调用）",
     )
@@ -151,6 +162,30 @@ def merge_report_content_args(args) -> None:
         sys.exit(1)
     if args.content is None:
         args.content = args.content_html
+
+
+def normalize_markdown_escaped_newlines(content: str | None, content_type: str | None) -> str | None:
+    """兼容 AI/CLI 传入的字面量转义（如 '\\n'），还原为真实换行。
+
+    仅在 markdown 场景处理，避免影响 html 正文中本就合法的反斜杠字符。
+    """
+    if content is None:
+        return None
+    if (content_type or "").lower() != "markdown":
+        return content
+    if "\\" not in content:
+        return content
+    normalized = content.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t")
+    return normalized
+
+
+def body_has_literal_escaped_newlines(content: str | None, content_type: str | None) -> bool:
+    """检测正文是否含应被自动修正的字面量换行转义。"""
+    if content is None:
+        return False
+    if (content_type or "").lower() != "markdown":
+        return False
+    return ("\\n" in content) or ("\\r\\n" in content)
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +486,18 @@ def build_save_draft_kwargs(
         template_id = str(template_raw) if template_raw is not None else None
         plan_raw = args.plan_id if args.plan_id is not None else detail.get("planId")
         plan_id = str(plan_raw) if plan_raw is not None else None
+        business_unit_raw = (
+            args.business_unit_id
+            if args.business_unit_id is not None
+            else detail.get("businessUnitId")
+        )
+        business_unit_id = str(business_unit_raw) if business_unit_raw is not None else None
+        virtual_emp_raw = (
+            args.virtual_emp_id
+            if args.virtual_emp_id is not None
+            else detail.get("virtualEmpId")
+        )
+        virtual_emp_id = str(virtual_emp_raw) if virtual_emp_raw is not None else None
         if args.body_content_type is not None:
             content_type = args.body_content_type
         else:
@@ -466,6 +513,8 @@ def build_save_draft_kwargs(
         privacy_level = "非涉密"
         template_id = None
         plan_id = str(args.plan_id) if args.plan_id is not None else None
+        business_unit_id = str(args.business_unit_id) if args.business_unit_id is not None else None
+        virtual_emp_id = str(args.virtual_emp_id) if args.virtual_emp_id is not None else None
         content_type = args.body_content_type if args.body_content_type is not None else "html"
 
     # 5.1/5.23：接收人以 reportLevelList 为准；acceptEmpIdList 仅在 reportLevelList 为空时兜底。
@@ -488,11 +537,13 @@ def build_save_draft_kwargs(
         "grade": args.grade,
         "privacy_level": privacy_level,
         "plan_id": plan_id,
+        "business_unit_id": business_unit_id,
         "template_id": template_id,
         "accept_emp_id_list": final_accept,
         "copy_emp_id_list": final_cc,
         "report_level_list": report_level_list,
         "file_vo_list": final_files,
+        "virtual_emp_id": virtual_emp_id,
         "draft_id": args.draft_id,
     }
 
@@ -546,6 +597,7 @@ def build_preview_shell(args, confirmed: list[dict], cc_confirmed: list[dict],
         "grade": from_api_detail.get("grade"),
         "typeId": from_api_detail.get("typeId"),
         "planId": from_api_detail.get("planId"),
+        "virtualEmpId": from_api_detail.get("virtualEmpId"),
         "contentType": from_api_detail.get("contentType"),
         "receiversResolved": accept_names,
         "ccResolved": cc_names,
@@ -596,6 +648,34 @@ def main():
     apply_params_file_pre_parse()
     args = parse_args()
     merge_report_content_args(args)
+    if args.fail_on_literal_newlines and body_has_literal_escaped_newlines(
+        args.content, args.body_content_type
+    ):
+        print(json.dumps({
+            "success": False,
+            "step": "validate_content_newline",
+            "error": (
+                "正文含字面量换行转义序列；已按 --fail-on-literal-newlines 拒绝保存。"
+            ),
+            "contentTypeUsed": args.body_content_type or "html",
+        }, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
+    # Markdown 兼容：将字面量 \n/\t 还原，避免页面按普通字符展示导致不换行
+    args.content = normalize_markdown_escaped_newlines(args.content, args.body_content_type)
+
+    # 安全护栏：--confirm-send 必须搭配 --draft-id（强制两步流程）
+    if args.confirm_send and not args.draft_id:
+        print(json.dumps({
+            "success": False,
+            "error": (
+                "【安全拦截】--confirm-send 必须搭配 --draft-id 使用。"
+                "请先不带 --confirm-send 调用一次以保存草稿并获取 reportId，"
+                "向用户展示完整预览，待用户明确确认后，"
+                "再执行 --draft-id <reportId> --confirm-send。"
+                "禁止跳过预览直接发送。"
+            ),
+        }, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
 
     send_only = bool(args.confirm_send and args.draft_id and not args.preview_only)
 

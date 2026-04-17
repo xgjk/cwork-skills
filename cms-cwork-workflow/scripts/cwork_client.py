@@ -2,15 +2,11 @@
 """
 CWork API Client — 共享 API 封装
 由所有编排脚本 import 使用
-
-环境变量:
-  CWORK_BASE_URL  (default: https://sg-al-cwork-web.mediportal.com.cn)
-  CWORK_APP_KEY   (required)
 """
 from __future__ import annotations
 
-import os
 import json
+import os
 import sys
 import urllib.request
 import urllib.parse
@@ -66,15 +62,12 @@ class CWorkError(Exception):
 # ---------------------------------------------------------------------------
 
 class CWorkClient:
-    BASE_URL = os.environ.get(
-        "CWORK_BASE_URL",
-        "https://sg-al-cwork-web.mediportal.com.cn"
-    )
+    BASE_URL = "https://sg-al-cwork-web.mediportal.com.cn"
 
     def __init__(self, app_key: str | None = None):
-        self.app_key = app_key or os.environ.get("CWORK_APP_KEY")
+        self.app_key = app_key
         if not self.app_key:
-            raise CWorkError("CWORK_APP_KEY environment variable is required")
+            raise CWorkError("缺少 AppKey。请先通过 cms-auth-skills 获取并注入 --app-key。")
 
     # ---- HTTP helpers -------------------------------------------------------
 
@@ -258,6 +251,7 @@ class CWorkClient:
         content_html: str,
         *,
         report_id: str | None = None,
+        business_unit_id: str | int | None = None,
         content_type: str = "html",
         type_id: int = 9999,
         grade: str = "一般",
@@ -268,6 +262,7 @@ class CWorkClient:
         copy_emp_id_list: list[str] | None = None,
         report_level_list: list[dict] | None = None,
         file_vo_list: list[dict] | None = None,
+        virtual_emp_id: str | None = None,
     ) -> dict:
         """Submit a report. Pass report_id to promote an existing draft.
 
@@ -280,6 +275,7 @@ class CWorkClient:
             "contentHtml": content_html,
             "contentType": content_type,
             "typeId": type_id,
+            "businessUnitId": business_unit_id,
             "grade": grade,
             "privacyLevel": privacy_level,
             "planId": plan_id,
@@ -288,6 +284,7 @@ class CWorkClient:
             "copyEmpIdList": copy_emp_id_list,
             "reportLevelList": report_level_list,
             "fileVOList": file_vo_list,
+            "virtualEmpId": virtual_emp_id,
         }
         if report_id is not None:
             payload["id"] = report_id
@@ -301,15 +298,23 @@ class CWorkClient:
         content_type: str = "html",
         add_emp_id_list: list[str] | None = None,
         send_msg: bool = True,
+        media_vo_list: list[dict] | None = None,
+        virtual_emp_id: str | None = None,
     ) -> int:
-        """回复汇报。正文写入 ``contentHtml``；``content_type=markdown`` 时为 Markdown。"""
+        """回复汇报。正文写入 ``contentHtml``；``content_type=markdown`` 时为 Markdown。
+
+        附件走 ``mediaVOList``，并由 ``isMedia`` 标记是否带附件。
+        """
         return self._post("/open-api/work-report/report/record/reply", {
             "appKey": self.app_key,
             "reportRecordId": report_record_id,
+            "isMedia": 1 if media_vo_list else 0,
+            "mediaVOList": media_vo_list,
             "contentHtml": content_html,
             "contentType": content_type,
             "addEmpIdList": add_emp_id_list,
             "sendMsg": send_msg,
+            "virtualEmpId": virtual_emp_id,
         })
 
     # -------------------------------------------------------------------------
@@ -323,6 +328,7 @@ class CWorkClient:
         *,
         draft_id: str | None = None,
         id: str | None = None,  # noqa: A002 — 兼容误用 save_draft(id=汇报id) 的调用方
+        business_unit_id: str | int | None = None,
         content_type: str = "markdown",
         type_id: int = 9999,
         grade: str = "一般",
@@ -333,6 +339,7 @@ class CWorkClient:
         copy_emp_id_list: list[str] | None = None,
         report_level_list: list[dict] | None = None,
         file_vo_list: list[dict] | None = None,
+        virtual_emp_id: str | None = None,
     ) -> dict:
         """5.23 草稿 saveOrUpdate。正文写入 ``contentHtml``；``content_type=markdown`` 时传 Markdown 字符串。"""
         effective_draft_id = draft_id if draft_id is not None else id
@@ -344,6 +351,7 @@ class CWorkClient:
             "contentHtml": content_html,
             "contentType": content_type,
             "typeId": type_id,
+            "businessUnitId": business_unit_id,
             "grade": grade,
             "privacyLevel": privacy_level,
             "planId": plan_id,
@@ -352,6 +360,7 @@ class CWorkClient:
             "copyEmpIdList": copy_emp_id_list,
             "reportLevelList": report_level_list,
             "fileVOList": file_vo_list,
+            "virtualEmpId": virtual_emp_id,
         }
         if effective_draft_id is not None:
             payload["id"] = effective_draft_id
@@ -491,6 +500,7 @@ class CWorkClient:
         copy_emp_id_list: list[str] | None = None,
         observer_emp_id_list: list[str] | None = None,
         push_now: bool = True,
+        virtual_emp_id: str | None = None,
     ) -> str:
         """Returns plan ID string."""
         result = self._post("/open-api/work-report/open-platform/report/plan/create", {
@@ -507,8 +517,58 @@ class CWorkClient:
             "observerEmpIdList": observer_emp_id_list,
             "pushNow": 1 if push_now else 0,
             "endTime": end_time,
+            "virtualEmpId": virtual_emp_id,
         })
         return str(result)
+
+    # -------------------------------------------------------------------------
+    # Virtual employee
+    # -------------------------------------------------------------------------
+
+    def add_virtual_employee(self, name: str, remark: str | None = None) -> str:
+        payload: dict = {"name": name}
+        if remark is not None:
+            payload["remark"] = remark
+        result = self._post("/open-api/cwork-user/virtual-employee/add", payload)
+        return str(result)
+
+    def list_virtual_employees(self) -> list:
+        data = self._get("/open-api/cwork-user/virtual-employee/list")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("list", "items", "records", "data"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    return value
+        return []
+
+    def update_virtual_employee(
+        self,
+        virtual_emp_id: str | int,
+        *,
+        name: str | None = None,
+        remark: str | None = None,
+    ) -> bool:
+        payload: dict = {"id": str(virtual_emp_id)}
+        if name is not None:
+            payload["name"] = name
+        if remark is not None:
+            payload["remark"] = remark
+        if len(payload) == 1:
+            raise ValueError("update_virtual_employee: 至少需要 name 或 remark 之一")
+        return bool(self._post("/open-api/cwork-user/virtual-employee/update", payload))
+
+    def delete_virtual_employee(self, virtual_emp_id: str | int) -> bool:
+        # API expects `virtualEmpId` as URL query parameter: ?virtualEmpId=xxx
+        params = {"virtualEmpId": str(virtual_emp_id)}
+        q = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+        url = (
+            f"{self.BASE_URL}/open-api/cwork-user/virtual-employee/delete"
+            f"?{q}&appKey={self.app_key}"
+        )
+        req = urllib.request.Request(url, headers=self._headers(), data=None, method="POST")
+        return bool(self._request(req))
 
     # -------------------------------------------------------------------------
     # Todo / feedback
@@ -594,6 +654,57 @@ class CWorkClient:
             "endTime": end_time,
             "limit": limit,
         })
+
+    # -------------------------------------------------------------------------
+    # Business unit
+    # -------------------------------------------------------------------------
+
+    def save_business_unit(
+        self,
+        name: str,
+        node_list: list[dict],
+        *,
+        description: str | None = None,
+        business_unit_id: str | int | None = None,
+    ) -> str:
+        """保存/更新业务单元。传 business_unit_id 代表更新。"""
+        payload: dict = {
+            "name": name,
+            "description": description,
+            "nodeList": node_list,
+        }
+        if business_unit_id is not None:
+            payload["id"] = business_unit_id
+        result = self._post("/open-api/work-report/businessUnit/save", payload)
+        return str(result)
+
+    def list_all_business_units(self) -> list:
+        """查询当前用户的业务单元列表（含节点）。
+
+        兼容后端返回：
+        - list: 直接数组
+        - dict: {"list": [...]} / {"items": [...]} / {"records": [...]}
+        """
+        data = self._get("/open-api/work-report/businessUnit/listAll")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("list", "items", "records", "data"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    return value
+        return []
+
+    def get_business_unit_by_id(self, business_unit_id: str | int) -> dict:
+        """按业务单元 ID 查询详情。"""
+        return self._get(
+            "/open-api/work-report/businessUnit/getById",
+            {"id": str(business_unit_id)},
+        )
+
+    def delete_business_unit(self, business_unit_id: str | int) -> bool:
+        """删除业务单元。"""
+        return bool(self._post("/open-api/work-report/businessUnit/delete", {"id": business_unit_id}))
 
     # -------------------------------------------------------------------------
     # History context retrieval (for approval decision support)
@@ -685,17 +796,53 @@ class CWorkClient:
 
 
 # ---------------------------------------------------------------------------
+# Runtime auth context
+# ---------------------------------------------------------------------------
+
+_RUNTIME_APP_KEY: str | None = None
+
+
+def capture_auth_context_pre_parse() -> None:
+    """Capture --app-key from sys.argv and remove it before argparse parsing.
+
+    This allows all business scripts to receive AppKey from upstream orchestration
+    (e.g. cms-auth-skills) without requiring each script to declare --app-key.
+    """
+    global _RUNTIME_APP_KEY
+    if _RUNTIME_APP_KEY:
+        return
+
+    argv = sys.argv[1:]
+    new_argv: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--app-key":
+            if i + 1 >= len(argv):
+                raise CWorkError("--app-key 缺少值")
+            _RUNTIME_APP_KEY = argv[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--app-key="):
+            _RUNTIME_APP_KEY = arg.split("=", 1)[1]
+            i += 1
+            continue
+        new_argv.append(arg)
+        i += 1
+
+    sys.argv = [sys.argv[0], *new_argv]
+
+
 # Convenience factory
 # ---------------------------------------------------------------------------
 
-def make_client() -> CWorkClient:
-    app_key = os.environ.get("CWORK_APP_KEY")
-    if not app_key:
+def make_client(app_key: str | None = None) -> CWorkClient:
+    resolved_app_key = app_key or _RUNTIME_APP_KEY
+    if not resolved_app_key:
         raise CWorkError(
-            "CWORK_APP_KEY environment variable is not set. "
-            "Run:  export CWORK_APP_KEY='your-key'"
+            "未获取到 AppKey。请先调用 cms-auth-skills，并将结果通过 --app-key 注入当前脚本。"
         )
-    return CWorkClient(app_key)
+    return CWorkClient(resolved_app_key)
 
 
 # ---------------------------------------------------------------------------
@@ -817,6 +964,9 @@ def apply_params_file_pre_parse() -> None:
 
     CLI args always take precedence over file values.
     """
+    # Step 0: capture runtime auth context before argparse sees unknown auth flags
+    capture_auth_context_pre_parse()
+
     # Step 1: find --params-file in sys.argv without a full parse
     params_file = None
     argv = sys.argv[1:]
@@ -853,6 +1003,12 @@ def apply_params_file_pre_parse() -> None:
     extra: list[str] = []
     for key, value in file_params.items():
         flag = f"--{key}"
+        if key == "app_key":
+            flag = "--app-key"
+            _capture = value if isinstance(value, str) else str(value)
+            global _RUNTIME_APP_KEY
+            _RUNTIME_APP_KEY = _capture
+            continue
         if flag in existing_flags:
             continue
         if isinstance(value, bool):
