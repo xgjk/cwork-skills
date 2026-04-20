@@ -379,7 +379,10 @@ class CWorkClient:
     def submit_draft(self, report_id: str) -> bool:
         """API 5.27: 将草稿转为正式汇报发出。路径参数 id 为汇报 id（与 saveOrUpdate 返回的 id 一致）。"""
         rid = urllib.parse.quote(str(report_id), safe="")
-        return bool(self._post(f"/open-api/work-report/draftBox/submit/{rid}"))
+        # 注意：部分环境成功时 data 可能为空对象/空值；若强转 bool 会被误判为失败，
+        # 上层自动重试将导致重复发送。只要 _post 未抛错（resultCode=1）即视为成功。
+        self._post(f"/open-api/work-report/draftBox/submit/{rid}")
+        return True
 
     def delete_draft(self, draft_id: str) -> bool:
         """5.26 删除草稿。路径 ``id`` 必须是 **5.24 列表项的 ``id``**（草稿箱记录主键）。
@@ -389,7 +392,9 @@ class CWorkClient:
         若只有汇报 id，请用 ``delete_draft_by_report_id``。
         """
         did = urllib.parse.quote(str(draft_id), safe="")
-        return bool(self._post(f"/open-api/work-report/draftBox/delete/{did}"))
+        # 与 submit_draft 一致：成功判定以 resultCode=1 为准，避免 data 为空值导致误判失败。
+        self._post(f"/open-api/work-report/draftBox/delete/{did}")
+        return True
 
     def delete_draft_by_report_id(
         self,
@@ -557,7 +562,9 @@ class CWorkClient:
             payload["remark"] = remark
         if len(payload) == 1:
             raise ValueError("update_virtual_employee: 至少需要 name 或 remark 之一")
-        return bool(self._post("/open-api/cwork-user/virtual-employee/update", payload))
+        # 仅以是否抛错判定成功，避免 data 为空值时误报失败。
+        self._post("/open-api/cwork-user/virtual-employee/update", payload)
+        return True
 
     def delete_virtual_employee(self, virtual_emp_id: str | int) -> bool:
         # API expects `virtualEmpId` as URL query parameter: ?virtualEmpId=xxx
@@ -568,7 +575,9 @@ class CWorkClient:
             f"?{q}&appKey={self.app_key}"
         )
         req = urllib.request.Request(url, headers=self._headers(), data=None, method="POST")
-        return bool(self._request(req))
+        # 仅以是否抛错判定成功，避免 data 为空值时误报失败。
+        self._request(req)
+        return True
 
     # -------------------------------------------------------------------------
     # Todo / feedback
@@ -704,7 +713,9 @@ class CWorkClient:
 
     def delete_business_unit(self, business_unit_id: str | int) -> bool:
         """删除业务单元。"""
-        return bool(self._post("/open-api/work-report/businessUnit/delete", {"id": business_unit_id}))
+        # 仅以是否抛错判定成功，避免 data 为空值时误报失败。
+        self._post("/open-api/work-report/businessUnit/delete", {"id": business_unit_id})
+        return True
 
     # -------------------------------------------------------------------------
     # History context retrieval (for approval decision support)
