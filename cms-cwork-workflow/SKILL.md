@@ -6,7 +6,7 @@ github: https://github.com/xgjk/cwork-skills
 dependencies:
   - cms-auth-skills
 # bump 时须同步修改同目录下 version.json 的 version 字段
-version: 1.0.8
+version: 1.0.9
 tools_provided:
   - name: cwork_client
     category: exec
@@ -155,11 +155,14 @@ python3 scripts/cwork-send-report.py \
   --app-key "<AppKey>" \
   --title "周报" \
   --content "<p>本周完成联调</p>" \
-  --receivers "张三"
+  --receivers "张三" \
+  --confirm-save-draft
 
 # 第二步：用户明确确认后再发出
 python3 scripts/cwork-send-report.py --app-key "<AppKey>" --draft-id "<reportId>" --confirm-send
 ```
+
+> 字段说明：上述 `--title` / `--content` 是脚本参数名；脚本调用开放接口时会自动映射为请求体字段 `main` / `contentHtml`。
 
 ### 示例 3：收件人不明确时先匹配业务单元
 
@@ -178,7 +181,9 @@ python3 scripts/cms-match-businessunit.py \
 - 未获取 `AppKey` 就直接执行 `scripts/*.py`。
 - 没读对应 `references/*.md` 就起调脚本。
 - 发送汇报时一次性带 `--confirm-send` 直接发出（缺少草稿确认步骤）。
+- 保存/更新草稿时不带 `--confirm-save-draft`（未获用户确认即落草稿）。
 - `cms-match-businessunit.py` 返回未匹配后，擅自猜测接收人继续发送。
+- 测试/调试汇报默认发给无关同事（应优先 `--test-mode` + 当前用户本人或测试账号）。
 
 ## 错误处理与通用参数
 

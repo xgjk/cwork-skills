@@ -82,6 +82,15 @@ def main() -> int:
         data = json.loads(out)
         ok("draft_list", f"items={len(data.get('items') or [])}")
 
+    smoke_self_name = os.environ.get("CWORK_SMOKE_SELF_NAME", "").strip()
+    if not smoke_self_name:
+        fail(
+            "send_preview_config",
+            "缺少 CWORK_SMOKE_SELF_NAME：请显式设置测试接收人（建议为当前用户本人或测试账号）",
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+
     code, out, err = run_script(
         [
             "cwork-send-report.py",
@@ -90,8 +99,12 @@ def main() -> int:
             "--content",
             "<p>一二三四五六七八九十</p>",
             "--receivers",
-            "张成鹏",
+            smoke_self_name,
+            "--test-mode",
+            "--current-user-name",
+            smoke_self_name,
             "--preview-only",
+            "--confirm-save-draft",
         ]
     )
     if code == 0:
@@ -115,8 +128,12 @@ def main() -> int:
             "--content",
             "<p>自动化API冒烟：请勿点正式发出，可删草稿。</p>",
             "--receivers",
-            "张成鹏，屈军利",
+            smoke_self_name,
+            "--test-mode",
+            "--current-user-name",
+            smoke_self_name,
             "--preview-only",
+            "--confirm-save-draft",
         ]
     )
     if code != 0:
