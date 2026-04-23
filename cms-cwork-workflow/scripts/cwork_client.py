@@ -249,6 +249,21 @@ class CWorkClient:
             {"reportId": str(report_id)},
         )
 
+    def create_share_link(self, biz_id: str | int, biz_type: int) -> str:
+        """创建汇报/任务分享链接。
+
+        biz_type:
+          1 = 汇报
+          2 = 任务
+        """
+        if biz_type not in (1, 2):
+            raise ValueError("create_share_link: biz_type 仅支持 1(汇报) 或 2(任务)")
+        data = self._post("/open-api/work-report/report/share/create", {
+            "bizId": int(str(biz_id)),
+            "bizType": biz_type,
+        })
+        return str(data)
+
     # -------------------------------------------------------------------------
     # Report — reply / submit / remind
     # -------------------------------------------------------------------------

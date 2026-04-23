@@ -537,11 +537,15 @@ def build_save_draft_kwargs(
         template_id = str(template_raw) if template_raw is not None else None
         plan_raw = args.plan_id if args.plan_id is not None else detail.get("planId")
         plan_id = str(plan_raw) if plan_raw is not None else None
-        business_unit_raw = (
-            args.business_unit_id
-            if args.business_unit_id is not None
-            else detail.get("businessUnitId")
-        )
+        # 接口约定：传 businessUnitId 时会忽略 reportLevelList。
+        # 因此当用户显式提供 --report-level-json 时，不应再继承草稿中的 businessUnitId，
+        # 否则会出现“流程节点设置成功但服务端不生效”的假象。
+        if args.business_unit_id is not None:
+            business_unit_raw = args.business_unit_id
+        elif args.report_level_json:
+            business_unit_raw = None
+        else:
+            business_unit_raw = detail.get("businessUnitId")
         business_unit_id = str(business_unit_raw) if business_unit_raw is not None else None
         virtual_emp_raw = (
             args.virtual_emp_id
