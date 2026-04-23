@@ -93,6 +93,53 @@ python3 scripts/cwork-send-report.py \
 | `--allow-minimal-body` | ❌ | 跳过「正文过短」校验（默认纯文本长度 **≤10** 会拒绝保存，**超过 10 字**不拦截；极短占位可加本参数） |
 | `--fail-on-literal-newlines` | ❌ | 仅供 CI/自动化使用：若 `markdown` 正文中含字面量 `\n` / `\r\n`，则在自动修正前直接失败退出，用于尽早暴露上游转义问题 |
 
+**流程节点角色映射（重点，避免模型误解）**
+
+- “建议人” = `reportLevelList[].type = "suggest"`
+- “决策人” = `reportLevelList[].type = "decide"`
+- “传阅/接收” = `reportLevelList[].type = "read"`
+- `type` 仅允许：`suggest` / `decide` / `read`（英文小写）
+- `nodeName` 是展示文案，可按业务语义自定义；`nodeCode` 非必填
+- 每个节点都应包含处理对象：`levelUserList`（或分组/部门字段）
+
+**示例 A：两个建议节点（同一人）**
+
+```json
+[
+  {
+    "level": 1,
+    "nodeName": "确认研究报告输出时间",
+    "type": "suggest",
+    "levelUserList": [{"empId": 10001}]
+  },
+  {
+    "level": 2,
+    "nodeName": "提交天工系统研究报告",
+    "type": "suggest",
+    "levelUserList": [{"empId": 10001}]
+  }
+]
+```
+
+**示例 B：建议后决策**
+
+```json
+[
+  {
+    "level": 1,
+    "nodeName": "建议人评估可行性",
+    "type": "suggest",
+    "levelUserList": [{"empId": 10001}]
+  },
+  {
+    "level": 2,
+    "nodeName": "负责人决策是否立项",
+    "type": "decide",
+    "levelUserList": [{"empId": 20001}]
+  }
+]
+```
+
 **流程步骤**：
 1. **Resolve** — 按姓名搜索员工；本轮回填的姓名参与合并，未填则沿用 5.25 详情中的接收人/抄送
 2. **Validate** — 姓名未找到或多匹配时报错终止
