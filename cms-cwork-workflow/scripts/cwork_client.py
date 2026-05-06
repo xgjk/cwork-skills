@@ -237,6 +237,38 @@ class CWorkClient:
             "pageSize": page_size,
         })
 
+    def get_report_simple_info(
+        self,
+        report_record_id: str | int,
+        *,
+        type_list: list[str] | None = None,
+        need_associated_report: bool | None = None,
+        need_associated_report_file: bool | None = None,
+    ) -> dict:
+        """
+        根据汇报记录 ID 查询正文 / 附件 / 回复 / 关联邮件等简要信息。
+
+        API:
+          POST /open-api/work-report/report/record/getReportSimpleInfo
+
+        请求体字段：
+          - reportRecordId: Long，汇报记录 ID（必填）
+          - typeList: List<String>，要查询的内容类型：
+              content（正文）、attachment（附件）、reply（回复）、mail（关联邮件）
+          - needAssociatedReport: Boolean，是否需要关联汇报的内容
+          - needAssociatedReportFile: Boolean，是否需要关联汇报的附件内容
+        """
+        payload: dict = {
+            "reportRecordId": int(str(report_record_id)),
+        }
+        if type_list:
+            payload["typeList"] = list(type_list)
+        if need_associated_report is not None:
+            payload["needAssociatedReport"] = bool(need_associated_report)
+        if need_associated_report_file is not None:
+            payload["needAssociatedReportFile"] = bool(need_associated_report_file)
+        return self._post("/open-api/work-report/report/record/getReportSimpleInfo", payload)
+
     def is_report_read(self, report_id: str | int, employee_id: str | int) -> bool:
         return self._get(
             "/open-api/work-report/reportInfoOpenQuery/isReportRead",

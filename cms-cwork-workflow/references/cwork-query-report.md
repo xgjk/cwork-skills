@@ -1,6 +1,6 @@
 ### 2. 查询汇报 — `cwork-query-report.py`
 
-**意图**：收件箱 / 发件箱 / 未读 / 汇报详情 / 节点详情 / **历史上下文检索** ✨ 新增
+**意图**：收件箱 / 发件箱 / 未读 / 汇报详情 / 节点详情 / **历史上下文检索** / **按汇报 ID 查询正文与附件等简要信息** ✨
 
 ```bash
 # 收件箱（默认）
@@ -29,7 +29,17 @@ python3 scripts/cwork-query-report.py --mode keyword-search \
   --keyword "公章" \
   --days 90
 
-# 默认会为返回的汇报补充 shareLink（最多前 20 条）
+# 按汇报记录 ID 查询正文 / 附件 / 回复 / 关联邮件等简要信息
+python3 scripts/cwork-query-report.py --mode record-simple-info \
+  --report-record-id <reportRecordId> \
+  --type content \
+  --type attachment \
+  --type reply \
+  --type mail \
+  --associated-report \
+  --associated-report-file
+
+# 默认会为部分模式返回的汇报补充 shareLink（最多前 20 条）
 python3 scripts/cwork-query-report.py --mode inbox --with-share-link --share-top-n 20
 
 # 如需关闭补链
@@ -41,10 +51,11 @@ python3 scripts/cwork-query-report.py --mode inbox --share-top-n 0
 
 | 参数 | 说明 |
 |------|------|
-| `--mode` | `inbox` / `outbox` / `unread` / `detail` / `node-detail` / `sender-history` / `keyword-search` / `pending` / `my-sent` |
+| `--mode` | `inbox` / `outbox` / `unread` / `detail` / `node-detail` / `sender-history` / `keyword-search` / `pending` / `my-sent` / `record-simple-info` |
 | `--page-size` | 分页大小（默认 20） |
 | `--page-index` | 页码（默认 1） |
 | `--report-id` | 汇报 ID（detail / node-detail 必填） |
+| `--report-record-id` | 汇报记录 ID（record-simple-info 必填） |
 | `--sender-emp-id` | 发件人员工 ID（sender-history 必填） |
 | `--keyword` | 搜索关键词（keyword-search 必填） |
 | `--days` | 回溯天数（sender-history / keyword-search，默认 90） |
@@ -53,6 +64,9 @@ python3 scripts/cwork-query-report.py --mode inbox --share-top-n 0
 | `--start-date` / `--end-date` | 时间范围（YYYY-MM-DD） |
 | `--with-share-link` / `--no-share-link` | 是否补充汇报分享链接（默认开启） |
 | `--share-top-n` | 列表场景最多补充前 N 条 `shareLink`（默认 20，传 0 表示当前页全部） |
+| `--type` | record-simple-info 模式下要查询的内容类型，可多次传入：`content`(正文)、`attachment`(附件)、`reply`(回复)、`mail`(关联邮件)。未传时默认四种全查。 |
+| `--associated-report` / `--no-associated-report` | record-simple-info 模式：是否需要关联汇报的内容（默认 false）。 |
+| `--associated-report-file` / `--no-associated-report-file` | record-simple-info 模式：是否需要关联汇报的附件内容（默认 false）。 |
 
 **收件箱 / 发件箱列表 vs 详情**：`inbox` / `outbox` / `pending` / `unread` / `my-sent`（与 `outbox` 同脚本路径）等模式返回的 **`data` 为接口原始分页结构**（常见含 `list`、`total`）。列表项里的「正文」类字段多为**摘要**，与 `send-report` 的 `--content` 全文不一定一致；需要全文或完整字段时请用 **`--mode detail --report-id`**（或 `node-detail`）拉详情。默认会在可识别到汇报 ID 的结果上补充 `shareLink`，便于点击打开原始汇报。
 
@@ -127,6 +141,54 @@ python3 scripts/cwork-query-report.py --mode inbox --share-top-n 0
 }
 ```
 
+**输出格式**（record-simple-info）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "reportRecordId": "2049459912303788033",
+    "writeEmpId": "1518900100127248386",
+    "writeEmpName": "陈明",
+    "createTime": "2026-04-29T12:26:52.000+00:00",
+    "reportRecord": {
+      "main": "项目周报",
+      "content": "本周完成接口联调",
+      "leadContent": "下周推进上线"
+    },
+    "associatedContent": {
+      "fileList": [
+        {
+          "fileName": "立项会AI模板BD反馈-20260429.docx",
+          "fileSummary": "细节调整：...",
+          "downloadUrl": "https://xxx.com/xxx.docx?...",
+          "suffix": "docx",
+          "size": 49196
+        }
+      ]
+    },
+    "replyList": [
+      {
+        "content": "请补充风险项",
+        "createTime": "2026-04-20 10:00:00",
+        "replyEmpName": "李四",
+        "title": "项目经理",
+        "type": "suggest",
+        "fileList": []
+      }
+    ],
+    "mailBoxList": [
+      {
+        "subject": "项目周报补充说明",
+        "realContent": "abc"
+      }
+    ],
+    "associatedReportList": [],
+    "planList": []
+  }
+}
+```
+
 ### AI 汇总输出建议（含可点击链接）
 
 - 当结果项包含 `shareLink` 时，AI 在汇总文本中应将链接直接附在标题后，避免用户二次追问。
@@ -134,5 +196,13 @@ python3 scripts/cwork-query-report.py --mode inbox --share-top-n 0
 - 若存在时间与汇报人，建议补充为：`- <汇报标题>（<时间>，<汇报人>，[打开汇报](<shareLink>)）`
 - 若某条无 `shareLink`，使用降级文案：`- <汇报标题>（链接暂不可用，可让我重试补链）`
 - 禁止编造链接；仅可使用脚本返回的真实 `shareLink`。
+
+对于 **record-simple-info** 模式，LLM 需要特别关注：
+
+- 当用户说「查汇报附件 / 查某条汇报的正文 / 查关联邮件 / 查某条汇报的回复 / 查汇报关联内容」时，应优先使用 `record-simple-info`，并根据意图选择合适的 `typeList`：
+  - 只要附件：仅传 `attachment`
+  - 附件 + 正文：传 `content` + `attachment`
+  - 附件 + 回复 + 关联邮件：传 `attachment` + `reply` + `mail`
+- 返回时请将附件的 `fileName` + 大小（`size`）+ 后缀（`suffix`）+ 摘要（`fileSummary`）以列表形式清晰呈现；`downloadUrl` 以链接形式暴露但不要修改或伪造。
 
 ---

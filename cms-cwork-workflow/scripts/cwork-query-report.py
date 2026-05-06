@@ -2,7 +2,11 @@
 """
 CWork Query Reports - Agent-First
 
-Modes: inbox / outbox / unread / detail / node-detail / sender-history / keyword-search / pending / my-sent
+Modes:
+  - inbox / outbox / unread / pending / my-sent
+  - detail / node-detail
+  - sender-history / keyword-search
+  - record-simple-info  ← 根据汇报记录 ID 查询正文 / 附件 / 回复 / 关联邮件等汇总信息
 
 Usage:
   python3 scripts/cwork-query-report.py --mode inbox [--page-size 20]
@@ -10,6 +14,7 @@ Usage:
   python3 scripts/cwork-query-report.py --mode node-detail --report-id <id>
   python3 scripts/cwork-query-report.py --mode sender-history --sender-emp-id <empId>
   python3 scripts/cwork-query-report.py --mode keyword-search --keyword "公章"
+  python3 scripts/cwork-query-report.py --mode record-simple-info --report-record-id <id> [--type content --type attachment ...]
   python3 scripts/cwork-query-report.py --mode pending
   python3 scripts/cwork-query-report.py --mode unread
 """
@@ -26,10 +31,22 @@ from cwork_client import CWorkClient, make_client, CWorkError, apply_params_file
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="CWork query reports (Agent-First)")
     parser.add_argument("--mode", required=True,
-                        choices=["inbox", "outbox", "unread", "detail", "node-detail", "sender-history", "keyword-search", "pending", "my-sent"])
+                        choices=[
+                            "inbox",
+                            "outbox",
+                            "unread",
+                            "detail",
+                            "node-detail",
+                            "sender-history",
+                            "keyword-search",
+                            "pending",
+                            "my-sent",
+                            "record-simple-info",
+                        ])
     parser.add_argument("--page-index", type=int, default=1)
     parser.add_argument("--page-size", type=int, default=20)
     parser.add_argument("--report-id", help="Report ID (required for detail/node-detail)")
+    parser.add_argument("--report-record-id", help="Report record ID (required for record-simple-info)")
     parser.add_argument("--sender-emp-id", help="Sender employee ID (required for sender-history)")
     parser.add_argument("--keyword", help="Search keyword (required for keyword-search)")
     parser.add_argument("--days", type=int, default=90, help="Days to look back (default 90)")
@@ -38,6 +55,39 @@ def parse_args(argv=None):
     parser.add_argument("--keyword-filter", help="Legacy: Keyword filter")
     parser.add_argument("--start-date", help="Start date YYYY-MM-DD")
     parser.add_argument("--end-date", help="End date YYYY-MM-DD")
+    parser.add_argument(
+        "--type",
+        dest="types",
+        action="append",
+        choices=["content", "attachment", "reply", "mail"],
+        help="Content types for record-simple-info: content/attachment/reply/mail. Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--associated-report",
+        dest="need_associated_report",
+        action="store_true",
+        help="Also query associated reports content (record-simple-info mode).",
+    )
+    parser.add_argument(
+        "--no-associated-report",
+        dest="need_associated_report",
+        action="store_false",
+        help="Do not query associated reports content (default).",
+    )
+    parser.set_defaults(need_associated_report=False)
+    parser.add_argument(
+        "--associated-report-file",
+        dest="need_associated_report_file",
+        action="store_true",
+        help="Also query associated reports attachments (record-simple-info mode).",
+    )
+    parser.add_argument(
+        "--no-associated-report-file",
+        dest="need_associated_report_file",
+        action="store_false",
+        help="Do not query associated reports attachments (default).",
+    )
+    parser.set_defaults(need_associated_report_file=False)
     parser.add_argument("--with-share-link", dest="with_share_link", action="store_true", default=True,
                         help="在返回结果中补充分享链接（默认开启）")
     parser.add_argument("--no-share-link", dest="with_share_link", action="store_false",
@@ -129,6 +179,20 @@ def main():
             data = client.get_report_info(args.report_id)
             if args.with_share_link:
                 _safe_attach_share_link(client, data, 1, ("reportId", "id"))
+            print(json.dumps({"success": True, "data": data}, ensure_ascii=False, indent=2))
+            return
+
+        if args.mode == "record-simple-info":
+            if not args.report_record_id:
+                _die("--report-record-id is required for record-simple-info mode")
+            # 若未显式指定 type，则默认查正文 + 附件 + 回复 + 关联邮件，覆盖最常见需求
+            type_list = args.types if args.types else ["content", "attachment", "reply", "mail"]
+            data = client.get_report_simple_info(
+                report_record_id=args.report_record_id,
+                type_list=type_list,
+                need_associated_report=args.need_associated_report,
+                need_associated_report_file=args.need_associated_report_file,
+            )
             print(json.dumps({"success": True, "data": data}, ensure_ascii=False, indent=2))
             return
 
