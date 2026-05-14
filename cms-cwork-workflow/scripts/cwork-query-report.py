@@ -5,7 +5,7 @@ CWork Query Reports - Agent-First
 Modes:
   - inbox / outbox / unread / pending / my-sent
   - detail / node-detail
-  - sender-history / keyword-search
+  - sender-history / keyword-search / search-list / code-detail
   - record-simple-info  ← 根据汇报记录 ID 查询正文 / 附件 / 回复 / 关联邮件等汇总信息
 
 Usage:
@@ -39,6 +39,8 @@ def parse_args(argv=None):
                             "node-detail",
                             "sender-history",
                             "keyword-search",
+                            "search-list",
+                            "code-detail",
                             "pending",
                             "my-sent",
                             "record-simple-info",
@@ -49,12 +51,34 @@ def parse_args(argv=None):
     parser.add_argument("--report-record-id", help="Report record ID (required for record-simple-info)")
     parser.add_argument("--sender-emp-id", help="Sender employee ID (required for sender-history)")
     parser.add_argument("--keyword", help="Search keyword (required for keyword-search)")
+    parser.add_argument("--report-code", help="Exact report code; search-list mode will prefer this when provided")
     parser.add_argument("--days", type=int, default=90, help="Days to look back (default 90)")
     parser.add_argument("--report-type", type=int, choices=[1, 2, 3, 4, 5])
     parser.add_argument("--status", type=int, help="Read status: 0=unread 1=read")
     parser.add_argument("--keyword-filter", help="Legacy: Keyword filter")
     parser.add_argument("--start-date", help="Start date YYYY-MM-DD")
     parser.add_argument("--end-date", help="End date YYYY-MM-DD")
+    parser.add_argument(
+        "--classification-id",
+        dest="classification_ids",
+        action="append",
+        type=str,
+        help="Report classification ID list for search-list mode. Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--from-emp-id",
+        dest="from_emp_ids",
+        action="append",
+        type=str,
+        help="Sender employee ID list for search-list mode. Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--to-emp-id",
+        dest="to_emp_ids",
+        action="append",
+        type=str,
+        help="Receiver employee ID list for search-list mode. Can be passed multiple times.",
+    )
     parser.add_argument(
         "--type",
         dest="types",
@@ -182,6 +206,19 @@ def main():
             print(json.dumps({"success": True, "data": data}, ensure_ascii=False, indent=2))
             return
 
+        if args.mode == "code-detail":
+            if not (args.report_code or args.keyword or args.keyword_filter):
+                _die("--report-code is required for code-detail mode")
+            data = client.search_report_record_page(
+                page_index=0,
+                page_size=10,
+                keyword=args.report_code or args.keyword or args.keyword_filter,
+            )
+            if args.with_share_link:
+                _attach_share_links_to_list(client, data.get("list"), 1, ("reportId", "id"), args.share_top_n)
+            print(json.dumps({"success": True, "data": data}, ensure_ascii=False, indent=2))
+            return
+
         if args.mode == "record-simple-info":
             if not args.report_record_id:
                 _die("--report-record-id is required for record-simple-info mode")
@@ -228,6 +265,23 @@ def main():
             )
             if args.with_share_link:
                 _attach_share_links_to_list(client, data.get("reports"), 1, ("reportId", "id"), args.share_top_n)
+            print(json.dumps({"success": True, "data": data}, ensure_ascii=False, indent=2))
+            return
+
+        if args.mode == "search-list":
+            search_keyword = args.report_code or args.keyword or args.keyword_filter
+            data = client.search_report_record_page(
+                page_index=max(0, args.page_index - 1),
+                page_size=args.page_size,
+                begin_time=_parse_date(args.start_date),
+                end_time=_parse_date(args.end_date, end_of_day=True),
+                keyword=search_keyword,
+                classification_id_list=args.classification_ids,
+                from_emp_id_list=args.from_emp_ids,
+                to_emp_id_list=args.to_emp_ids,
+            )
+            if args.with_share_link:
+                _attach_share_links_to_list(client, data.get("list"), 1, ("reportId", "id"), args.share_top_n)
             print(json.dumps({"success": True, "data": data}, ensure_ascii=False, indent=2))
             return
 

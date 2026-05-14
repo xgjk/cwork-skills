@@ -237,6 +237,45 @@ class CWorkClient:
             "pageSize": page_size,
         })
 
+    def search_report_record_page(
+        self,
+        page_index: int,
+        page_size: int,
+        *,
+        begin_time: int | None = None,
+        end_time: int | None = None,
+        keyword: str | None = None,
+        classification_id_list: list[int | str] | None = None,
+        from_emp_id_list: list[str] | None = None,
+        to_emp_id_list: list[str] | None = None,
+    ) -> dict:
+        """分页搜索汇报列表。
+
+        API:
+          POST /open-api/work-report/report/record/searchPage
+
+        请求体字段：
+          - beginTime: Long，开始时间戳（毫秒）
+          - endTime: Long，结束时间戳（毫秒）
+          - keyWord: String，关键词
+          - pageIndex: Integer，从 0 开始
+          - pageSize: Integer
+          - classificationIdList: List<Long>，汇报分类 ID 列表
+          - fromEmpIdList: List<String>，发汇报人 ID 列表
+          - toEmpIdList: List<String>，收汇报人 ID 列表
+        """
+        payload: dict = {
+            "beginTime": begin_time,
+            "endTime": end_time,
+            "keyWord": keyword,
+            "pageIndex": page_index,
+            "pageSize": page_size,
+            "classificationIdList": list(classification_id_list) if classification_id_list else None,
+            "fromEmpIdList": list(from_emp_id_list) if from_emp_id_list else None,
+            "toEmpIdList": list(to_emp_id_list) if to_emp_id_list else None,
+        }
+        return self._post("/open-api/work-report/report/record/searchPage", payload)
+
     def get_report_simple_info(
         self,
         report_record_id: str | int,
